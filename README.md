@@ -1,5 +1,7 @@
 # Votelib: Evaluation of voting systems in Python
 
+[![Documentation Status](https://readthedocs.org/projects/votelib/badge/?version=latest)](https://votelib.readthedocs.io/en/latest/?badge=latest)
+
 Votelib is a package to evaluate results of elections under various systems.
 It aims to provide reliable implementations of many voting systems so that
 they may be evaluated as they are used in real-world conditions and compared.
