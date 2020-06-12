@@ -248,10 +248,15 @@ class TransferableVoteSelector:
                 first_prefs, eliminated=[None],
             )
             for cand_alloc in split_alloc.values():
+                to_remove = []
+                to_update = {}
                 for vote, n_votes in cand_alloc.items():
                     if vote[0] is None:
-                        del cand_alloc[vote]
-                        cand_alloc[vote[1:]] = n_votes
+                        to_remove.append(vote)
+                        to_update[vote[1:]] = n_votes
+                for vote in to_remove:
+                    del cand_alloc[vote]
+                cand_alloc.update(to_update)
             return split_alloc
         else:
             return first_prefs
