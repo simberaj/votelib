@@ -23,3 +23,7 @@ jobs:
       with:
         password: ${{ secrets.test_pypi_apitoken }}
         repository_url: https://test.pypi.org/legacy/
+    - name: Build and publish
+      uses: pypa/gh-action-pypi-publish@master
+      with:
+        password: ${{ secrets.pypi_apitoken }}
