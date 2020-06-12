@@ -12,6 +12,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'recommonmark',
     'nbsphinx',
+    'sphinx_autodoc_typehints',
 ]
 
 source_suffix = {
