@@ -26,3 +26,6 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 html_theme = 'sphinxdoc'
 
 html_static_path = ['_static']
+
+# to set the master doc path correctly for readthedocs
+master_doc = 'index'
