@@ -97,7 +97,8 @@ of 2018:
     assert evaluator.evaluate(votes) == ['Andrés Manuel López Obrador']
 
 This is, of course, the simplest possible election system, but the library
-covers many more!
+covers many more! Find more in the
+[ReadTheDocs documentation](https://votelib.readthedocs.io/en/latest/).
 
 ## Contributors
 Feedback, additions, suggestions, issues and pull requests are welcome and much
