@@ -182,7 +182,7 @@ class Coalition(ElectionParty):
 
     def __init__(self,
                  parties: List[PoliticalParty],
-                 name: str = None,
+                 name: Optional[str] = None,
                  number: Optional[int] = None,
                  affiliations: Optional[List[PoliticalParty]] = None,
                  lead: Optional[Person] = None,

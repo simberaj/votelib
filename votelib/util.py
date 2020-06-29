@@ -8,7 +8,9 @@ import itertools
 import collections
 import bisect
 import random
+import inspect
 from fractions import Fraction
+from decimals import Decimal
 from typing import Any, List, Tuple, Dict, FrozenSet, Union
 from numbers import Number
 
@@ -122,3 +124,97 @@ def exact_mean(values: List[Union[int, Fraction]]) -> Fraction:
 EXACT_AGGREGATORS = {
     'mean': exact_mean,
 }
+
+
+def default_serialization(class_):
+    '''A class decorator to provide from_dict() and to_dict() methods.'''
+    param_names = inspect.signature(cls.__init__).parameters.keys()
+
+    def from_dict(cls, value_dict: Dict[str, Any]) -> class_:
+        return cls(**{
+            attr: deserialize_value(value)
+            for attr, value in value_dict.items()
+        })
+
+    def to_dict(self) -> Dict[str, Any]:
+        out_dict = {'class': self.__class__.__name__}
+        for attr in param_names:
+            out_dict[attr] = serialize_value(getattr(self, attr))
+        return out_dict
+
+    class_.from_dict = from_dict
+    class_.to_dict = to_dict
+    return class_
+
+
+def serialize_value(value: Any) -> Any:
+    if hasattr(value, 'to_dict'):
+        return value.to_dict()
+    elif isinstance(value, ATOMIC_TYPES):
+        return value
+    elif type(value) in CONVERTIBLE_TYPES:
+        return CONVERTIBLE_TYPES[type(value)](value)
+    elif hasattr(value, '__iter__'):
+        if hasattr(value, 'items'):
+            return {key: serialize_value(val) for key, val in value.items()}
+        else:
+            return [serialize_value(val) for val in value]
+    else:
+        raise ValueError(f'cannot serialize {value!r} to dict format')
+
+
+def deserialize_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        if 'type' in value and value['type'].isidentifier():
+            typeobj = eval(value['type'])
+            if 'value' in value:
+                return typeobj(value['value'])
+            elif 'arguments' in value:
+                return typeobj(*value['arguments'])
+            elif 'parameters' in value:
+                return typeobj(**value['parameters'])
+            else:
+                raise ValueError(f'invalid dict contents: {value!r}')
+        elif 'class' in value and value['class'].isidentifier():
+            cls = eval(value['class'])
+            return cls(**{
+                key: val for key, val in value.items() if key != 'class'
+            })
+        else:
+            return {key: deserialize_value(val) for key, val in value.items()}
+    elif isinstance(value, ATOMIC_TYPES):
+        return value
+    elif isinstance(value, list):
+        return [deserialize_value(val) for val in value]
+    else:
+        raise ValueError(f'cannot deserialize {value!r}, type unknown')
+
+
+def fraction_to_json(f: Fraction) -> Dict[str, Any]:
+    return {'type': 'Fraction', 'arguments': f.as_integer_ratio()}
+
+
+def decimal_to_json(d: Decimal) -> Dict[str, Any]:
+    return {'type': 'Decimal', 'value': str(d)}
+
+
+def sequence_to_json_factory(typeobj):
+    typename = typeobj.__name__
+    def sequence_to_json(seq) -> Dict[str, Any]:
+        return {'type': typename, 'value': [serialize_value(v) for v in t]}
+    return sequence_to_json
+
+
+ATOMIC_TYPES: List[type] = [
+    str, int, float, bool, None,
+]
+
+CONVERTIBLE_TYPES: Dict[type, Callable] = {
+    Fraction: fraction_to_json,
+    Decimal: decimal_to_json,
+}
+
+SEQUENCE_TYPES: List[type] = [frozenset, tuple]
+
+for seqtype in SEQUENCE_TYPES:
+    CONVERTIBLE_TYPES[seqtype] = sequence_to_json_factory(seqtype)
