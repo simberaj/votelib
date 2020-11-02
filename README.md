@@ -83,21 +83,24 @@ inexact arithmetics; if you detect any such behavior, please report it.
 Votelib is meant as a library to be imported from other Python code.
 The objects in the various submodules of Votelib can be easily combined and
 chained to model the election system of choice. Examples can be found in the
-documentation. A simple example is evaluating the Mexican presidential election
-of 2018:
+documentation. A simple example is evaluating the [Irish presidential election
+of 1990](https://en.wikipedia.org/wiki/1990_Irish_presidential_election), which
+uses a single transferable vote method:
 
     votes = {
-        'Andrés Manuel López Obrador': 30113483,
-        'Ricardo Anaya': 12610120,
-        'José Antonio Meade': 9289853,
-        'Jaime Rodríguez Calderón': 2961732,
-        'Margarita Zavala': 32743,
+        ('Mary Robinson',): 612265,
+        ('Brian Lenihan',): 694484,
+        ('Austin Currie', 'Brian Lenihan'): 36789,
+        ('Austin Currie', 'Mary Robinson'): 205565,
+        ('Austin Currie',): 25548,
     }
-    evaluator = votelib.evaluate.Plurality()
-    assert evaluator.evaluate(votes) == ['Andrés Manuel López Obrador']
+    evaluator = votelib.evaluate.sequential.TransferableVoteSelector(
+        quota_function='droop',
+        transferer='Hare'
+    )
+    assert evaluator.evaluate(votes) == ['Mary Robinson']
 
-This is, of course, the simplest possible election system, but the library
-covers many more! Find more in the
+The library covers many more systems like this! Find more in the
 [ReadTheDocs documentation](https://votelib.readthedocs.io/en/latest/).
 
 ## Contributors
