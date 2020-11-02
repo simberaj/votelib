@@ -83,8 +83,9 @@ inexact arithmetics; if you detect any such behavior, please report it.
 Votelib is meant as a library to be imported from other Python code.
 The objects in the various submodules of Votelib can be easily combined and
 chained to model the election system of choice. Examples can be found in the
-documentation. A simple example is evaluating the Irish presidential election
-of 1990, which uses a single transferable vote method:
+documentation. A simple example is evaluating the [Irish presidential election
+of 1990](https://en.wikipedia.org/wiki/1990_Irish_presidential_election), which
+uses a single transferable vote method:
 
     votes = {
         ('Mary Robinson',): 612265,
