@@ -10,8 +10,8 @@ import bisect
 import random
 import inspect
 from fractions import Fraction
-from decimals import Decimal
-from typing import Any, List, Tuple, Dict, FrozenSet, Union
+from decimal import Decimal
+from typing import Any, List, Tuple, Dict, FrozenSet, Union, Callable
 from numbers import Number
 
 from .vote import RankedVoteType
@@ -127,14 +127,8 @@ EXACT_AGGREGATORS = {
 
 
 def default_serialization(class_):
-    '''A class decorator to provide from_dict() and to_dict() methods.'''
+    '''A class decorator to provide a to_dict() method for voting system component persistence.'''
     param_names = inspect.signature(cls.__init__).parameters.keys()
-
-    def from_dict(cls, value_dict: Dict[str, Any]) -> class_:
-        return cls(**{
-            attr: deserialize_value(value)
-            for attr, value in value_dict.items()
-        })
 
     def to_dict(self) -> Dict[str, Any]:
         out_dict = {'class': self.__class__.__name__}
@@ -142,7 +136,6 @@ def default_serialization(class_):
             out_dict[attr] = serialize_value(getattr(self, attr))
         return out_dict
 
-    class_.from_dict = from_dict
     class_.to_dict = to_dict
     return class_
 
@@ -159,14 +152,16 @@ def serialize_value(value: Any) -> Any:
             return {key: serialize_value(val) for key, val in value.items()}
         else:
             return [serialize_value(val) for val in value]
+    elif hasattr(value, '__call__'):
+        return {'callable': '.'.join((value.__module__, value.__name__))}
     else:
         raise ValueError(f'cannot serialize {value!r} to dict format')
 
 
 def deserialize_value(value: Any) -> Any:
     if isinstance(value, dict):
-        if 'type' in value and value['type'].isidentifier():
-            typeobj = eval(value['type'])
+        if 'type' in value and is_scoped_identifier(value['type']):
+            typeobj = get_object(value['type'])
             if 'value' in value:
                 return typeobj(value['value'])
             elif 'arguments' in value:
@@ -175,11 +170,14 @@ def deserialize_value(value: Any) -> Any:
                 return typeobj(**value['parameters'])
             else:
                 raise ValueError(f'invalid dict contents: {value!r}')
-        elif 'class' in value and value['class'].isidentifier():
-            cls = eval(value['class'])
+        elif 'class' in value and is_scoped_identifier(value['class']):
+            cls = get_object(value['class'])
             return cls(**{
-                key: val for key, val in value.items() if key != 'class'
+                key: deserialize_value(inner_val)
+                for key, inner_val in value.items() if key != 'class'
             })
+        elif 'callable' in value and is_scoped_identifier(value['callable']):
+            return get_object(value['callable'])
         else:
             return {key: deserialize_value(val) for key, val in value.items()}
     elif isinstance(value, ATOMIC_TYPES):
@@ -188,6 +186,35 @@ def deserialize_value(value: Any) -> Any:
         return [deserialize_value(val) for val in value]
     else:
         raise ValueError(f'cannot deserialize {value!r}, type unknown')
+
+
+def get_object(identifier: str) -> Any:
+    if '.' not in str:
+        return eval(identifier)
+    else:
+        module, name = identifier.rsplit('.', 1)
+        if module not in sys.modules:
+            importlib.import_module(module)
+        return getattr(sys.modules[module], name)
+
+
+def from_dict(value: Dict[str, Any]) -> Any:
+    if not isinstance(value, dict):
+        raise ValueError(f'invalid votelib object definition: must be a dict, got {type(value)}')
+    elif 'class' not in value:
+        raise ValueError(f'invalid votelib object definition: must have a class key')
+    elif not is_scoped_identifier(value['class']):
+        raise ValueError(f"invalid votelib class definition: {value['class']}")
+    else:
+        return deserialize_value(value)
+
+
+def is_scoped_identifier(value: Any):
+    return (
+        isinstance(value, str)
+        and not value.startswith('.')
+        and all(chunk.isidentifier() for chunk in value.split('.'))
+    )
 
 
 def fraction_to_json(f: Fraction) -> Dict[str, Any]:
