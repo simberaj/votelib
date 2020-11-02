@@ -23,7 +23,7 @@ wrap it into a formalized and named election system.
 '''
 
 from . import evaluate
-from .util import from_dict, default_serialization
+from .util import from_dict, default_serialization    # noqa: F401
 
 
 @default_serialization

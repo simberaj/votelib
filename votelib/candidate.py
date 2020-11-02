@@ -377,7 +377,7 @@ class BasicNominator(Nominator):
         if not isinstance(candidate, Candidate):
             raise CandidateError(f'invalid candidate {candidate}')
         if not self.allow_blank and isinstance(candidate, BlankVoteOption):
-            raise CandidateError(f'blank vote')
+            raise CandidateError('blank vote')
 
 
 class PersonNominator(Nominator):

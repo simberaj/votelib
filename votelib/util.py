@@ -3,12 +3,14 @@
 There should normally be no need to use these functions directly.
 '''
 
+import sys
 import operator
 import itertools
 import collections
 import bisect
 import random
 import inspect
+import importlib
 from fractions import Fraction
 from decimal import Decimal
 from typing import Any, List, Tuple, Dict, FrozenSet, Union, Callable
@@ -127,8 +129,8 @@ EXACT_AGGREGATORS = {
 
 
 def default_serialization(class_):
-    '''A class decorator to provide a to_dict() method for voting system component persistence.'''
-    param_names = inspect.signature(cls.__init__).parameters.keys()
+    '''A class decorator to provide a to_dict() serialization method.'''
+    param_names = inspect.signature(class_.__init__).parameters.keys()
 
     def to_dict(self) -> Dict[str, Any]:
         out_dict = {'class': self.__class__.__name__}
@@ -200,11 +202,13 @@ def get_object(identifier: str) -> Any:
 
 def from_dict(value: Dict[str, Any]) -> Any:
     if not isinstance(value, dict):
-        raise ValueError(f'invalid votelib object definition: must be a dict, got {type(value)}')
+        raise ValueError('invalid votelib object def: dict expected,'
+                         f'got {value!r}')
     elif 'class' not in value:
-        raise ValueError(f'invalid votelib object definition: must have a class key')
+        raise ValueError('invalid votelib object def: must have a class key')
     elif not is_scoped_identifier(value['class']):
-        raise ValueError(f"invalid votelib class definition: {value['class']}")
+        inval_cls = value['class']
+        raise ValueError(f"invalid votelib class def: {inval_cls}")
     else:
         return deserialize_value(value)
 
@@ -227,8 +231,10 @@ def decimal_to_json(d: Decimal) -> Dict[str, Any]:
 
 def sequence_to_json_factory(typeobj):
     typename = typeobj.__name__
+
     def sequence_to_json(seq) -> Dict[str, Any]:
-        return {'type': typename, 'value': [serialize_value(v) for v in t]}
+        return {'type': typename, 'value': [serialize_value(v) for v in seq]}
+
     return sequence_to_json
 
 
