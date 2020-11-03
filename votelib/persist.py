@@ -7,6 +7,9 @@ from decimal import Decimal
 from typing import Any, List, Dict, Callable
 
 
+ZERO_PARAMS: List[str] = ['args', 'kwargs']
+
+
 def simple_serialization(class_: type) -> type:
     '''A decorator to provide a simple to_dict() serialization method.
 
@@ -18,10 +21,12 @@ def simple_serialization(class_: type) -> type:
     if hasattr(class_, 'serialize_params'):
         param_names = class_.serialize_params
     else:
-        param_names = list(inspect.signature(class_.__init__).parameters.keys())
+        param_names = list(inspect.signature(
+            class_.__init__
+        ).parameters.keys())
         if 'self' in param_names:
             param_names.remove('self')
-        if param_names == ['args', 'kwargs'] and class_.__init__ == object.__init__:
+        if param_names == ZERO_PARAMS and class_.__init__ == object.__init__:
             param_names = []
 
     def to_dict(self) -> Dict[str, Any]:
@@ -43,10 +48,15 @@ def serialize_value(value: Any) -> Any:
         return CONVERTIBLE_TYPES[type(value)](value)
     elif hasattr(value, '__iter__'):
         if hasattr(value, 'items') and hasattr(value, 'keys'):
-            if all(isinstance(key, str) in value.keys()):
-                return {key: serialize_value(val) for key, val in value.items()}
+            if all(isinstance(key, str) for key in value.keys()):
+                return {
+                    key: serialize_value(val)
+                    for key, val in value.items()
+                }
             else:
-                raise NotImplementedError('serializing a dictionary with nonstring keys')
+                raise NotImplementedError(
+                    'serializing a dictionary with nonstring keys'
+                )
         else:
             return [serialize_value(val) for val in value]
     elif hasattr(value, '__call__'):

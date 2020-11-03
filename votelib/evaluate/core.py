@@ -903,8 +903,9 @@ class ByParty:
         results = collections.defaultdict(dict)
         for party, n_party_seats in overall_result.items():
             party_votes = {
-                constituency: sum(subset_conv.convert(cvotes, [party]).values())
-                for constituency, cvotes in votes.items()
+                constituency: sum(
+                    subset_conv.convert(cvotes, [party]).values()
+                ) for constituency, cvotes in votes.items()
             }
             if accepts_prev_gains(allocator):
                 party_prev_gains = {
