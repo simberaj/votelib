@@ -24,6 +24,7 @@ from numbers import Number
 from ..candidate import Candidate
 from ..vote import RankedVoteType
 from ..evaluate.proportional import LargestRemainder
+from ..persist import simple_serialization
 
 
 def ranked_next(vote: RankedVoteType,
@@ -188,7 +189,26 @@ class SimpleVoteTransferer(VoteTransferer):
             (to_remove if cand in may_remove else to_retain).append(cand)
         return to_retain, to_remove
 
+    def _subtract(self,
+                  cand_alloc: Dict[RankedVoteType, Number],
+                  quota: int,
+                  ) -> None:
+        # Remove a total of *quota* votes from values of *cand_alloc*.
+        # Hare STV does this randomly, Gregory STV uses exact proportional
+        # fractions.
+        raise NotImplementedError
 
+    def _distribute_equal_ranking(self,
+                                  targets: FrozenSet[Candidate],
+                                  n_votes: int,
+                                  ) -> Dict[Candidate, int]:
+        # Distribute a total of *n_votes* among candidates in *targets*.
+        # Hare STV does this randomly, Gregory STV uses exact proportional
+        # fractions.
+        raise NotImplementedError
+
+
+@simple_serialization
 class Hare(SimpleVoteTransferer):
     '''Hare (random ballot selection) vote transferer.
 
@@ -244,6 +264,7 @@ class Hare(SimpleVoteTransferer):
         return result
 
 
+@simple_serialization
 class Gregory(SimpleVoteTransferer):
     '''Gregory (fractional) vote transferer.
 

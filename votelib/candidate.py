@@ -26,6 +26,8 @@ import abc
 import collections
 from typing import Any, List, Optional, Union
 
+from .persist import simple_serialization
+
 
 class CandidateError(Exception):
     '''A candidate is invalid in the given context.
@@ -93,6 +95,7 @@ class IndividualElectionOption(Candidate):
     '''
 
 
+@simple_serialization
 class Person(IndividualElectionOption):
     '''A physical person standing for the election.
 
@@ -115,6 +118,7 @@ class Person(IndividualElectionOption):
         self.number = number
         self.membership = membership
         self.candidacy_for = candidacy_for
+        self.properties = properties
 
     def __repr__(self) -> str:
         return (
@@ -134,6 +138,7 @@ class ElectionParty(Candidate):
     '''
 
 
+@simple_serialization
 class PoliticalParty(ElectionParty):
     '''A political party or movement that is eligible to stand in elections.
 
@@ -157,6 +162,7 @@ class PoliticalParty(ElectionParty):
         self.number = number
         self.affiliations = affiliations
         self.lead = lead
+        self.properties = properties
 
     def __repr__(self) -> str:
         return (
@@ -166,6 +172,7 @@ class PoliticalParty(ElectionParty):
         )
 
 
+@simple_serialization
 class Coalition(ElectionParty):
     '''A coalition of two or more election-eligible parties.
 
@@ -212,6 +219,7 @@ class Coalition(ElectionParty):
         )
 
 
+@simple_serialization
 class IndividualToPartyMapper:
     '''Define mapping from individuals to parties.
 
@@ -282,6 +290,7 @@ class IndividualToPartyMapper:
             return party
 
 
+@simple_serialization
 class BlankVoteOption(ElectionParty, IndividualElectionOption):
     '''A base class for blank (non-partisan) vote choices.
 
@@ -356,6 +365,7 @@ class Nominator(metaclass=abc.ABCMeta):
 
 
 # Nominators (checkers)
+@simple_serialization
 class BasicNominator(Nominator):
     '''Validate that the election candidates are valid objects.
 
@@ -380,6 +390,7 @@ class BasicNominator(Nominator):
             raise CandidateError('blank vote')
 
 
+@simple_serialization
 class PersonNominator(Nominator):
     '''Validate that election candidates are physical persons and not parties.
 
@@ -400,7 +411,6 @@ class PersonNominator(Nominator):
         :param candidate: Candidate to be checked.
         :raises CandidateError: If a candidate is invalid.
         '''
-        print(candidate, isinstance(candidate, IndividualElectionOption))
         if not isinstance(candidate, IndividualElectionOption):
             raise CandidateError(candidate, IndividualElectionOption)
         if isinstance(candidate, BlankVoteOption):
@@ -412,6 +422,7 @@ class PersonNominator(Nominator):
             )
 
 
+@simple_serialization
 class PartyNominator(Nominator):
     '''Check that election candidates are electoral parties, not persons.
 

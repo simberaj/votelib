@@ -26,6 +26,7 @@ from numbers import Number
 from . import core
 from ..candidate import Candidate
 from ..component import pairwin_scorer
+from ..persist import simple_serialization
 
 
 def pairwise_wins(counts: Dict[Tuple[Candidate, Candidate], int]
@@ -48,6 +49,15 @@ def pairwise_wins(counts: Dict[Tuple[Candidate, Candidate], int]
     return wins
 
 
+class Selector:
+    def evaluate(self,
+                 votes: Dict[Tuple[Candidate, Candidate], int],
+                 n_seats: int = 1,
+                 ) -> List[Candidate]:
+        raise NotImplementedError
+
+
+@simple_serialization
 class Copeland:
     '''Copeland (count of pairwise wins) Condorcet selection evaluator.
 
@@ -107,6 +117,7 @@ class Copeland:
         )
 
 
+@simple_serialization
 class Schulze:
     '''Schulze (beatpath) Condorcet selection evaluator.
 
@@ -158,6 +169,7 @@ class Schulze:
         return paths
 
 
+@simple_serialization
 class KemenyYoung:
     '''Kemeny-Young Condorcet selection evaluator.
 
@@ -222,6 +234,7 @@ class KemenyYoung:
         )
 
 
+@simple_serialization
 class MinimaxCondorcet:
     '''Minimax Condorcet selection evaluator.
 
@@ -239,7 +252,7 @@ class MinimaxCondorcet:
     def __init__(self,
                  pairwin_scoring: Union[str, Callable] = 'winning_votes',
                  ):
-        self.scorer = pairwin_scorer.construct(pairwin_scoring)
+        self.pairwin_scoring = pairwin_scorer.construct(pairwin_scoring)
 
     def evaluate(self,
                  votes: Dict[Tuple[Candidate, Candidate], int],
@@ -254,7 +267,7 @@ class MinimaxCondorcet:
         :param n_seats: Number of candidates to select.
         '''
         max_counterscore = {}
-        for pair, score in self.scorer(votes).items():
+        for pair, score in self.pairwin_scoring(votes).items():
             max_counterscore[pair[1]] = max(
                 max_counterscore.get(pair[1], -float('inf')),
                 score
@@ -265,6 +278,7 @@ class MinimaxCondorcet:
         )
 
 
+@simple_serialization
 class RankedPairs:
     '''Tideman's ranked pairs Condorcet selection evaluator.
 
@@ -282,7 +296,7 @@ class RankedPairs:
     def __init__(self,
                  pairwin_scoring: Union[str, Callable] = 'winning_votes',
                  ):
-        self.scorer = pairwin_scorer.construct(pairwin_scoring)
+        self.pairwin_scoring = pairwin_scorer.construct(pairwin_scoring)
 
     def evaluate(self,
                  votes: Dict[Tuple[Candidate, Candidate], int],
@@ -296,7 +310,7 @@ class RankedPairs:
             to produce them from ranked votes.
         :param n_seats: Number of candidates to select.
         '''
-        scored = self.scorer(votes)
+        scored = self.pairwin_scoring(votes)
         pairwise_winners = list(votes.keys())
         pairwise_winners.sort(key=votes.get, reverse=True)
         pairwise_winners.sort(key=scored.get, reverse=True)

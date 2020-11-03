@@ -21,6 +21,7 @@ from .candidate import \
     Candidate, Constituency, IndividualElectionOption, ElectionParty
 from .vote import RankedVoteType, ScoreVoteType
 from .component import rankscore
+from .persist import simple_serialization
 
 
 def _subtract_lowest(scores: Dict[Any, int],
@@ -43,6 +44,7 @@ class Converter:
 
 
 # Aggregators from more complicated votes to simple magnitudes
+@simple_serialization
 class ApprovalToSimpleVotes:
     '''Aggregate approval votes to simple votes.
 
@@ -75,6 +77,7 @@ class ApprovalToSimpleVotes:
         return dict(agg_votes)
 
 
+@simple_serialization
 class ScoreToSimpleVotes:
     '''Aggregate scores (cardinal votes) to simple votes.
 
@@ -244,6 +247,7 @@ class ScoreToSimpleVotes:
         return scores
 
 
+@simple_serialization
 class RankedToPositionalVotes:
     '''Aggregate ranked votes to simple votes.
 
@@ -292,6 +296,7 @@ class RankedToPositionalVotes:
         return util.descending_dict(agg_votes)
 
 
+@simple_serialization
 class RankedToCondorcetVotes:
     '''Aggregate ranked votes to counts of pairwise wins.
 
@@ -339,6 +344,7 @@ class RankedToCondorcetVotes:
         return dict(counts)
 
 
+@simple_serialization
 class ScoreToRankedVotes:
     '''Convert score votes to ranked votes.
 
@@ -393,6 +399,7 @@ class ScoreToRankedVotes:
 
 
 # Inverters
+@simple_serialization
 class InvertedSimpleVotes:
     '''Vote inverter to represent negative simple votes.
 
@@ -406,6 +413,7 @@ class InvertedSimpleVotes:
 
 
 # Individual/party converters
+@simple_serialization
 class IndividualToPartyVotes:
     '''Aggregate votes for individual candidates to votes for their parties.
 
@@ -434,6 +442,7 @@ class IndividualToPartyVotes:
         return dict(aggregated)
 
 
+@simple_serialization
 class IndividualToPartyResult:
     '''Aggregate individual elected candidates to results for their parties.
 
@@ -465,6 +474,7 @@ class IndividualToPartyResult:
         return dict(aggregated)
 
 
+@simple_serialization
 class GroupVotesByParty:
     '''Group individual simple votes to a dict nested by their parties.
 
@@ -496,6 +506,7 @@ class GroupVotesByParty:
         return aggregated
 
 
+@simple_serialization
 class SelectionToDistribution:
     '''Adapt selection results to distribution (seat count) format.
 
@@ -514,6 +525,7 @@ class SelectionToDistribution:
         return {cand: self.amount for cand in elected}
 
 
+@simple_serialization
 class MergedSelections:
     '''Compile candidates elected in constituencies to a single result list.
 
@@ -552,6 +564,7 @@ class MergedSelections:
         return ranks
 
 
+@simple_serialization
 class MergedDistributions:
     '''Merge many distribution election results into one.
 
@@ -582,6 +595,7 @@ class MergedDistributions:
 
 
 # Constituency-defined vote aggregators by party or district
+@simple_serialization
 class VoteTotals:
     '''Count total votes/results for each candidate in all constituencies.
 
@@ -602,6 +616,7 @@ class VoteTotals:
         return all_districts
 
 
+@simple_serialization
 class ConstituencyTotals:
     '''Count total votes (or results) for all candidates in each constituency.
 
@@ -622,6 +637,7 @@ class ConstituencyTotals:
         }
 
 
+@simple_serialization
 class PartyTotals:
     '''Count total votes for parties from grouped votes for its candidates.
 
@@ -645,13 +661,14 @@ class PartyTotals:
         }
 
 
+@simple_serialization
 class ByConstituency:
     '''Perform conversion for each constituency votes/results separately.
 
     :param converter: A converter to wrap. Will be called to convert votes (or
         results) for each constituency separately.
     '''
-    def __init__(self, converter):
+    def __init__(self, converter: Converter):
         self.converter = converter
 
     def convert(self,
@@ -669,6 +686,7 @@ class ByConstituency:
         }
 
 
+@simple_serialization
 class InvalidVoteEliminator:
     '''Only allow through votes that are declared valid by a given validator.
 
@@ -700,6 +718,7 @@ class InvalidVoteEliminator:
         return votes
 
 
+@simple_serialization
 class RoundedVotes:
     '''Round vote counts to the given number of decimal digits.
 
@@ -755,6 +774,7 @@ class RoundedVotes:
         }
 
 
+@simple_serialization
 class SubsettedVotes:
     '''Subset the votes to only concern a subset of candidates.
 

@@ -29,8 +29,10 @@ from . import core
 from .. import util
 from ..candidate import Candidate
 from ..component import quota
+from ..persist import simple_serialization
 
 
+@simple_serialization
 class ThresholdOpenList:
     '''A threshold-based open list evaluator.
 
@@ -138,6 +140,7 @@ class ThresholdOpenList:
                 return elected
 
 
+@simple_serialization
 class ListOrderTieBreaker:
     '''A wrapper for any selector for open-list candidate selection.
 

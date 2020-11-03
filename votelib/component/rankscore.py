@@ -10,6 +10,8 @@ from fractions import Fraction
 from typing import List, Any
 from numbers import Number
 
+from ..persist import simple_serialization
+
 
 def select_padded(sequence: List[Any], n: int, pad_with: Any = 0) -> List[Any]:
     '''Select n leading elements from sequence, padding with pad_with.
@@ -38,6 +40,7 @@ class RankScorer(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
+@simple_serialization
 class Borda(RankScorer):
     '''Borda rank scorer, corresponding to the original Borda count variant.
 
@@ -100,6 +103,7 @@ class Borda(RankScorer):
             )
 
 
+@simple_serialization
 class Dowdall(RankScorer):
     '''Dowdall (Nauru) rank scorer.
 
@@ -119,6 +123,7 @@ class Dowdall(RankScorer):
         return [Fraction(1, rank + 1) for rank in range(n_ranked)]
 
 
+@simple_serialization
 class Geometric(RankScorer):
     '''A geometric progression rank scorer.
 
@@ -144,6 +149,7 @@ class Geometric(RankScorer):
         return [Fraction(1, self.base ** rank) for rank in range(n_ranked)]
 
 
+@simple_serialization
 class ModifiedBorda(RankScorer):
     '''Modified Borda count rank scorer.
 
@@ -164,6 +170,7 @@ class ModifiedBorda(RankScorer):
         return [n_ranked - rank for rank in range(n_ranked)]
 
 
+@simple_serialization
 class FixedTop(RankScorer):
     '''A rank scorer with fixed score for the top rank.
 
@@ -187,6 +194,7 @@ class FixedTop(RankScorer):
         return [max(self.top - rank, 0) for rank in range(n_ranked)]
 
 
+@simple_serialization
 class SequenceBased(RankScorer):
     '''A rank scorer with a predetermined sequence of scores.
 

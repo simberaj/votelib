@@ -33,9 +33,8 @@ def sk_nr_2020_data():
         for party, n_seats in zip(parties, seats) if int(n_seats) > 0
     }
 
-@pytest.fixture(scope='module')
-def sk_nr_2020_evaluator():
-    # minimal vote threshold eliminator
+
+def get_sk_nr_evaluator():
     standard_elim = votelib.evaluate.threshold.RelativeThreshold(
         decimal.Decimal('.05'), accept_equal=True
     )
@@ -55,14 +54,25 @@ def sk_nr_2020_evaluator():
     )
     # TODO: missing provisions for tie handling and low amount of candidates
     return votelib.evaluate.core.Conditioned(eliminator, evaluator)
+    
 
-
-def test_sk_nr_2020(sk_nr_2020_data, sk_nr_2020_evaluator):
+def test_sk_nr_2020(sk_nr_2020_data):
     votes, results = sk_nr_2020_data
     nominator = votelib.candidate.PartyNominator()
     for cand in votes.keys():
         nominator.validate(cand)
-    assert sk_nr_2020_evaluator.evaluate(votes, 150) == results
+    assert get_sk_nr_evaluator().evaluate(votes, 150) == results
+
+
+CZ_EP_EVALUATOR = votelib.evaluate.core.FixedSeatCount(
+    votelib.evaluate.core.Conditioned(
+        votelib.evaluate.threshold.RelativeThreshold(
+            decimal.Decimal('.05'), accept_equal=True
+        ),
+        votelib.evaluate.proportional.HighestAverages('d_hondt')
+    ),
+    21
+)
 
 
 def test_cz_ep_2019():
@@ -116,13 +126,16 @@ def test_cz_ep_2019():
         'KDU-ČSL': 2,
         'KSČM': 1,
     }
-    eliminator = votelib.evaluate.threshold.RelativeThreshold(
+    assert CZ_EP_EVALUATOR.evaluate(votes) == results
+
+
+CZ_PSP_EVALUATOR = votelib.evaluate.core.ByConstituency(
+    votelib.evaluate.proportional.HighestAverages('d_hondt'),
+    votelib.evaluate.proportional.LargestRemainder('hare'),
+    preselector=votelib.evaluate.threshold.RelativeThreshold(
         decimal.Decimal('.05'), accept_equal=True
     )
-    base_eval = votelib.evaluate.proportional.HighestAverages('d_hondt')
-    # TODO: missing provisions for tie handling and low amount of candidates
-    fin_eval = votelib.evaluate.core.Conditioned(eliminator, base_eval)
-    assert fin_eval.evaluate(votes, 21) == results
+)
 
 
 @pytest.fixture(scope='module')
@@ -139,15 +152,7 @@ def cz_psp_2017_votes():
     return votes
 
 def test_cz_psp_2017(cz_psp_2017_votes):
-    eliminator = votelib.evaluate.threshold.RelativeThreshold(
-        decimal.Decimal('.05'), accept_equal=True
-    )
-    regional_evaluator = votelib.evaluate.proportional.HighestAverages('d_hondt')
-    apportioner = votelib.evaluate.proportional.LargestRemainder('hare')
-    evaluator = votelib.evaluate.core.ByConstituency(
-        regional_evaluator, apportioner, preselector=eliminator
-    )
-    reg_results = evaluator.evaluate(cz_psp_2017_votes, 200)
+    reg_results = CZ_PSP_EVALUATOR.evaluate(cz_psp_2017_votes, 200)
     nat_agg = votelib.convert.VoteTotals()
     assert nat_agg.convert(reg_results) == {
         'ANO': 78,
@@ -176,3 +181,11 @@ def test_cz_psp_2017(cz_psp_2017_votes):
         'Piráti': 1,
         'SPD': 1,
     }
+
+
+def get_evaluators():
+    return [
+        CZ_EP_EVALUATOR,
+        CZ_PSP_EVALUATOR,
+        get_sk_nr_evaluator(),
+    ]

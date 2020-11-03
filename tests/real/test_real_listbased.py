@@ -52,11 +52,10 @@ def nmnmet_cc_2018_data():
     return votes, party_lists, results_obj
 
 
-@pytest.fixture(scope='module')
-def nmnmet_cc_2018_evaluator():
+def get_evaluators():
     mapper = votelib.candidate.IndividualToPartyMapper(independents='error')
     vote_grouper = votelib.convert.GroupVotesByParty(mapper)
-    return votelib.evaluate.core.FixedSeatCount(
+    return [votelib.evaluate.core.FixedSeatCount(
         votelib.evaluate.core.PreConverted(
             vote_grouper,
             votelib.evaluate.core.PartyListEvaluator(
@@ -76,7 +75,12 @@ def nmnmet_cc_2018_evaluator():
             )
         ),
         21
-    )
+    )]
+
+
+@pytest.fixture(scope='module')
+def nmnmet_cc_2018_evaluator():
+    return get_evaluators()[0]
 
 
 def test_nmnmet_cc_2018(nmnmet_cc_2018_data, nmnmet_cc_2018_evaluator):

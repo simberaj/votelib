@@ -13,7 +13,7 @@ from typing import Any, List, Dict, Union, Callable
 from numbers import Number
 
 from . import core, condorcet
-from .. import convert
+from .. import convert, persist
 from ..candidate import Candidate
 from ..vote import ScoreVoteType
 
@@ -45,6 +45,12 @@ class ScoreVoting:
             min_count=min_count,
             truncation=truncation,
             bottom_value=bottom_value,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(
+            {'class': persist.scoped_class_name(self)},
+            **self._agg.to_dict()
         )
 
     def evaluate(self,
@@ -111,6 +117,12 @@ class MajorityJudgment:
             bottom_value=bottom_value,
         )
         self.tie_breaker = getattr(self, '_tiebreak_' + tie_breaking)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(
+            {'class': persist.scoped_class_name(self)},
+            **self._agg.to_dict()
+        )
 
     def evaluate(self,
                  votes: Dict[Candidate, Dict[Number, int]],
@@ -238,13 +250,18 @@ class STAR:
         than one extra candidate in the run-off, or specify the run-off size
         as a fraction of the number of seats to be filled.
 
+    For single-winner elections, keep the runoff_added_* parameters at their
+    defaults; then, the choice of runoff_evaluator does not matter because all
+    Condorcet evaluators behave the same for two-candidate elections.
+
     :param runoff_added_count: Number of extra candidates in the run-off (added
         to the number of seats to be filled) as an absolute number.
     :param runoff_added_fraction: Number of extra candidates in the run-off
         (added to the number of seats to be filled) as a fraction of the number
         of seats to be filled.
-    :param runoff_method: Name of the Condorcet evaluator to use for the
-        run-off (references `condorcet.EVALUATORS`).
+    :param runoff_evaluator: Name of the Condorcet evaluator to use for the
+        run-off (references `condorcet.EVALUATORS`), or an instance of such a
+        selector (must accept votes in pairwise win format).
     :param unscored_value: Score to give to a candidate that was not assigned
         a score by the voter. None means such ballots will not be considered
         for the candidate. A callable is not accepted.
@@ -262,12 +279,14 @@ class STAR:
     def __init__(self,
                  runoff_added_count: int = 1,
                  runoff_added_fraction: Number = 0,
-                 runoff_method: str = 'schulze',
+                 runoff_evaluator: Union[str, condorcet.Selector] = 'schulze',
                  unscored_value: Union[str, Number, None] = None,
                  min_count: int = 0,
                  truncation: Number = 0,
                  bottom_value: Number = 0,
                  ):
+        if isinstance(runoff_evaluator, str):
+            runoff_evaluator = condorcet.EVALUATORS[runoff_evaluator]
         self._agg = convert.ScoreToSimpleVotes(
             function='sum',
             unscored_value=unscored_value,
@@ -281,8 +300,19 @@ class STAR:
         self._runoff_tocond_conv = convert.RankedToCondorcetVotes()
         self.runoff_added_count = runoff_added_count
         self.runoff_added_fraction = runoff_added_fraction
-        self.runoff_method = runoff_method
-        self.runoff_evaluator = condorcet.EVALUATORS[runoff_method]
+        self.runoff_evaluator = runoff_evaluator
+
+    def to_dict(self) -> Dict[str, Any]:
+        out = {
+            'class': persist.scoped_class_name(self),
+            'runoff_added_count': self.runoff_added_count,
+            'runoff_added_fraction': self.runoff_added_fraction,
+            'runoff_evaluator': self.runoff_evaluator.to_dict(),
+        }
+        for key, val in self._agg.to_dict():
+            if key != 'function':
+                out[key] = val
+        return out
 
     def evaluate(self,
                  votes: Dict[ScoreVoteType, int],

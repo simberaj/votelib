@@ -11,6 +11,7 @@ from numbers import Number
 
 from .. import convert, util, vote
 from ..candidate import Candidate, Constituency, Person, ElectionParty
+from ..persist import simple_serialization
 
 
 class VotingSystemError(Exception):
@@ -243,6 +244,7 @@ class OpenListEvaluator(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
+@simple_serialization
 class MultistageDistributor:
     '''A distribution evaluator with several rounds of awarding seats.
 
@@ -300,6 +302,7 @@ class MultistageDistributor:
                 )
 
 
+@simple_serialization
 class AdjustedSeatCount:
     '''Distribute an adjusted total number of seats according to votes cast.
 
@@ -347,6 +350,7 @@ class AdjustedSeatCount:
         )
 
 
+@simple_serialization
 class AllowOverhang:
     '''Increase the total number of seats to allow keeping overhang seats.
 
@@ -358,6 +362,8 @@ class AllowOverhang:
     seats awarded in the second round stays constant. This leads to parties
     that performed strong in the first round but weak in the second round
     gaining more representation than would be decided by the second round only.
+
+    This is the system used in New Zealand legislative elections.
 
     :param evaluator: A distribution evaluator producing the proportional
         results from the second round votes to determine which seats are
@@ -397,6 +403,7 @@ class AllowOverhang:
         return adj
 
 
+@simple_serialization
 class LevelOverhang:
     '''Increase the total number of seats to proportional, keeping overhang.
 
@@ -460,16 +467,25 @@ class LevelOverhang:
         return adj_count + nonprop_drop - n_seats
 
 
+@simple_serialization
 class LevelOverhangByConstituency:
     '''Increase the total number of seats to proportional in constituencies.
 
     This is a variant :class:`LevelOverhang` that works out overhang and
     leveling seats on a constituency level (such as Länder in Germany)
     while still maintaining nationwide proportionality. For a detailed
-    description of the overhang leveling process, see that class. This variant
-    detects overhang seats for each constituency separately, then
+    description of the overhang leveling process, see that class. This
+    variant detects overhang seats for each constituency separately and
+    progressively increases the number of leveling seats until proportionality
+    is satisfied on a national level.
 
-    :param constituency_evaluator:
+    This is the system used for the election to German Bundestag.
+
+    :param constituency_evaluator: Evaluates the total party result per
+        constituency.
+    :param overall_evaluator: Evaluates the total party result nationwide;
+        if not given, an aggregate of the constituency result is used
+        instead.
     '''
     def __init__(self,
                  constituency_evaluator: Distributor,
@@ -549,6 +565,7 @@ class LevelOverhangByConstituency:
         return adj_count + nonprop_drop - n_seats
 
 
+@simple_serialization
 class PostConverted:
     '''An evaluator whose results are run through a converter.
 
@@ -577,6 +594,7 @@ class PostConverted:
         )
 
 
+@simple_serialization
 class PreConverted:
     '''An evaluator whose votes are first run through a converter.
 
@@ -606,6 +624,7 @@ class PreConverted:
         )
 
 
+@simple_serialization
 class Conditioned:
     '''An evaluator whose votes are pre-selected to exclude some variants.
 
@@ -619,17 +638,17 @@ class Conditioned:
         main evaluator - only those that are returned by its evaluate method
         do so. It can accept previous gain counts but should not need
         the number of seats (it should be independent of it).
-    :param vote_subsetter: A subsetter to subset a vote to just concern the
+    :param subsetter: A subsetter to subset a vote to just concern the
         candidates returned by the eliminator.
     '''
     def __init__(self,
                  eliminator: SeatlessSelector,
                  evaluator: Evaluator,
-                 vote_subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
+                 subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
                  ):
         self.eliminator = eliminator
         self.evaluator = evaluator
-        self.subsetter = convert.SubsettedVotes(vote_subsetter)
+        self.subsetter = subsetter
 
     def evaluate(self,
                  votes: Dict[Any, int],
@@ -653,7 +672,9 @@ class Conditioned:
             )
         else:
             not_eliminated = self.eliminator.evaluate(votes)
-        elim_votes = self.subsetter.convert(votes, not_eliminated)
+        elim_votes = convert.SubsettedVotes(self.subsetter).convert(
+            votes, not_eliminated
+        )
         if accepts_prev_gains(self.evaluator):
             kwargs = kwargs.copy()
             kwargs['prev_gains'] = prev_gains
@@ -662,6 +683,7 @@ class Conditioned:
         )
 
 
+@simple_serialization
 class ByConstituency:
     '''Perform constituency-wise evaluation of given system.
 
@@ -696,12 +718,12 @@ class ByConstituency:
                      Distributor, Dict[Constituency, int], int, None
                  ] = None,
                  preselector: Optional[Selector] = None,
-                 vote_subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
+                 subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
                  ):
         self.evaluator = evaluator
         self.apportioner = apportioner
         self.preselector = preselector
-        self.subsetter = convert.SubsettedVotes(vote_subsetter)
+        self.subsetter = subsetter
 
     def evaluate(self,
                  votes: Dict[Constituency, Dict[Any, int]],
@@ -769,7 +791,9 @@ class ByConstituency:
             return None
         else:
             if preselected is not None:
-                votes = self.subsetter.convert(votes, preselected)
+                votes = convert.SubsettedVotes(self.subsetter).convert(
+                    votes, preselected
+                )
             if accepts_prev_gains(self.evaluator):
                 return self.evaluator.evaluate(
                     votes, n_seats,
@@ -816,6 +840,7 @@ class ByConstituency:
             return None
 
 
+@simple_serialization
 class ByParty:
     '''Distribute overall party results among its constituency lists.
 
@@ -834,17 +859,17 @@ class ByParty:
         the party to individual constituencies. If None, the overall evaluator
         is reused. In either case, the allocator must accept simple votes
         for constituencies as candidates.
-    :param vote_subsetter: A subsetter according to the vote type used, to
+    :param subsetter: A subsetter according to the vote type used, to
         extract votes for any single party from the overall votes.
     '''
     def __init__(self,
                  overall_evaluator: Distributor,
                  allocator: Optional[Distributor] = None,
-                 vote_subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
+                 subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
                  ):
         self.overall_evaluator = overall_evaluator
         self.allocator = allocator
-        self.vote_subsetter = vote_subsetter
+        self.subsetter = subsetter
 
     def evaluate(self,
                  votes: Dict[Constituency, Dict[Any, int]],
@@ -874,11 +899,11 @@ class ByParty:
         allocator = self.allocator
         if allocator is None:
             allocator = self.overall_evaluator
-        subsetter = convert.SubsettedVotes(self.vote_subsetter)
+        subset_conv = convert.SubsettedVotes(self.subsetter)
         results = collections.defaultdict(dict)
         for party, n_party_seats in overall_result.items():
             party_votes = {
-                constituency: sum(subsetter.convert(cvotes, [party]).values())
+                constituency: sum(subset_conv.convert(cvotes, [party]).values())
                 for constituency, cvotes in votes.items()
             }
             if accepts_prev_gains(allocator):
@@ -904,6 +929,7 @@ class ByParty:
         return dict(results)
 
 
+@simple_serialization
 class FixedSeatCount:
     '''An evaluator wrapper that provides a fixed seat count.
 
@@ -938,6 +964,7 @@ class FixedSeatCount:
         )
 
 
+@simple_serialization
 class PartyListEvaluator:
     '''Evaluate which candidates are elected from party lists.
 
@@ -1023,6 +1050,7 @@ def accepts_prev_gains(evaluator: Evaluator) -> bool:
     return 'prev_gains' in inspect.signature(evaluator.evaluate).parameters
 
 
+@simple_serialization
 class Plurality:
     '''Plurality voting / maximum score evaluator. Elects a list of candidates.
 
@@ -1052,6 +1080,9 @@ class Plurality:
     -   *Score voting* after the votes are aggregated by a score vote
         aggregator such as :class:`convert.ScoreToSimpleVotes`
         (:class:`votelib.evaluate.cardinal.ScoreVoting` can be used instead).
+
+    These voting systems all use this evaluator together with some vote
+    conversion or validation criteria.
     '''
 
     def evaluate(self,
@@ -1074,6 +1105,7 @@ class Plurality:
         return get_n_best(votes, n_seats)
 
 
+@simple_serialization
 class TieBreaking:
     '''Break ties from the main evaluation through a dedicated tiebreaker.
 
@@ -1094,11 +1126,11 @@ class TieBreaking:
     def __init__(self,
                  main: Evaluator,
                  tiebreaker: Selector,
-                 vote_subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
+                 subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
                  ):
         self.main = main
         self.tiebreaker = tiebreaker
-        self.subsetter = convert.SubsettedVotes(vote_subsetter)
+        self.subsetter = subsetter
 
     def evaluate(self, votes, *args, **kwargs):
         '''Evaluate the election, breaking ties if they arise.
@@ -1110,11 +1142,12 @@ class TieBreaking:
             evaluator (and the tiebreaker, after subsetting).
         '''
         main_result = self.main.evaluate(votes, *args, **kwargs)
+        subset_conv = convert.SubsettedVotes(self.subsetter)
         if Tie.any(main_result):
             main_result = main_result.copy()
             ties = self._collect_ties(main_result)
             for tie, n_tied_seats in ties.items():
-                sub_votes = self.subsetter.convert(votes, tie)
+                sub_votes = subset_conv.convert(votes, tie)
                 broken = self.tiebreaker.evaluate(sub_votes, n_tied_seats)
                 if hasattr(main_result, 'items'):
                     self._replace_distr_ties(main_result, tie, broken)

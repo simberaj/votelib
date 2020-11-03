@@ -37,6 +37,7 @@ import collections
 
 from . import candidate
 from .candidate import Candidate
+from .persist import simple_serialization
 
 
 class VoteError(Exception, metaclass=abc.ABCMeta):
@@ -140,6 +141,12 @@ class VoteMagnitudeChecker:
         self.value_name = value_name
         self._active = self.min_value is not None or self.max_value is not None
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'bounds': [self.min_value, self.max_value],
+            'value_name': self.value_name
+        }
+
     def __bool__(self) -> bool:
         '''Return True if the checker contains any constraints to check.'''
         return self._active
@@ -177,6 +184,7 @@ class VoteValidator(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
+@simple_serialization
 class SimpleVoteValidator:
     '''Validate a simple vote (voting directly for a single candidate).
 
@@ -200,6 +208,7 @@ class SimpleVoteValidator:
         self.nominator.validate(vote)
 
 
+@simple_serialization
 class ApprovalVoteValidator:
     '''Validate an approval vote (voting for a number of candidates equally).
 
@@ -209,14 +218,22 @@ class ApprovalVoteValidator:
     :param vote_count_bounds: A tuple with lower and upper bounds
         (inclusive) for the number of candidates any vote can contain.
         None means the respective bound is not checked.
+        Ignored if count_checker is given.
+    :param count_checker: A :class:`VoteMagnitudeChecker` that checks the
+        number of candidates any vote can contain.
     :param nominator: Nominator used to check candidates. The default uses the
         technical criteria specified by the :class:`Candidate` class.
     '''
+    serialize_params = ['count_checker', 'nominator']
+
     def __init__(self,
                  vote_count_bounds: IntBoundsTupleType = (None, None),
+                 count_checker: Optional[VoteMagnitudeChecker] = None,
                  nominator: candidate.Nominator = candidate.BasicNominator(),
                  ):
-        self.count_checker = VoteMagnitudeChecker(vote_count_bounds)
+        if count_checker is None:
+            count_checker = VoteMagnitudeChecker(vote_count_bounds)
+        self.count_checker = count_checker
         self.nominator = nominator
 
     def validate(self, vote: FrozenSet[Candidate]) -> None:
@@ -236,6 +253,7 @@ class ApprovalVoteValidator:
         self.count_checker.check(len(vote))
 
 
+@simple_serialization
 class RankedVoteValidator:
     '''Validate a ranked vote (ranking of a number of candidates).
 
@@ -246,35 +264,57 @@ class RankedVoteValidator:
     :param total_vote_count_bounds: A tuple with lower and upper bounds
         (inclusive) for the number of candidates any vote can rank.
         None means the respective bound is not checked.
+        Ignored if total_count_checker is given.
     :param rank_vote_count_bounds: A tuple with lower and upper bounds
         (inclusive) for the number of candidates allowed to share any rank.
         The default settings disallow tied rankings. None means the respective
         bound is not checked. Alternatively, a dictionary can be specified
         that maps ranks (1-indexed) to bound tuples.
+        Ignored if rank_vote_count_checkers is given.
+    :param total_count_checker: A :class:`VoteMagnitudeChecker` that checks the
+        total number of candidates any vote can rank.
+    :param rank_vote_count_checkers: A mapping of integer ranks to instances
+        of :class:`VoteMagnitudeChecker` to check numbers of candidates
+        allowed to share any rank.
     :param nominator: Nominator used to check candidates. The default uses only
         technical criteria specified by the :class:`Candidate` class.
     '''
+    serialize_params = [
+        'total_count_checker',
+        'rank_vote_count_checkers',
+        'nominator'
+    ]
+
     def __init__(self,
                  total_vote_count_bounds: IntBoundsTupleType = (None, None),
                  rank_vote_count_bounds: Union[
                      IntBoundsTupleType,
                      Dict[int, IntBoundsTupleType],
                  ] = (1, 1),
+                 total_count_checker: Optional[VoteMagnitudeChecker] = None,
+                 rank_vote_count_checkers: Optional[
+                     Dict[int, VoteMagnitudeChecker]
+                 ] = None,
                  nominator: candidate.Nominator = candidate.BasicNominator(),
                  ):
-        self.total_checker = VoteMagnitudeChecker(total_vote_count_bounds)
-        if hasattr(rank_vote_count_bounds, 'items'):
-            rank_vote_count_checker = collections.defaultdict(
-                lambda: VoteMagnitudeChecker((None, None))
-            )
-            for rank, bounds in rank_vote_count_bounds.items():
-                rank_vote_count_checker[rank] = VoteMagnitudeChecker(bounds)
-        else:
-            rank_checker = VoteMagnitudeChecker(rank_vote_count_bounds)
-            rank_vote_count_checker = collections.defaultdict(
-                lambda: rank_checker
-            )
-        self.rank_vote_count_checkers = rank_vote_count_checker
+        if total_count_checker is None:
+            total_count_checker = VoteMagnitudeChecker(total_vote_count_bounds)
+        self.total_count_checker = total_count_checker
+        if rank_vote_count_checkers is None:
+            if hasattr(rank_vote_count_bounds, 'items'):
+                rank_vote_count_checkers = collections.defaultdict(
+                    lambda: VoteMagnitudeChecker((None, None))
+                )
+                for rank, bounds in rank_vote_count_bounds.items():
+                    rank_vote_count_checkers[rank] = VoteMagnitudeChecker(
+                        bounds
+                    )
+            else:
+                rank_checker = VoteMagnitudeChecker(rank_vote_count_bounds)
+                rank_vote_count_checkers = collections.defaultdict(
+                    lambda: rank_checker
+                )
+        self.rank_vote_count_checkers = rank_vote_count_checkers
         self.nominator = nominator
 
     def validate(self, vote: RankedVoteType) -> None:
@@ -301,7 +341,7 @@ class RankedVoteValidator:
             else:
                 all_candidates.add(item)
                 total_votes += 1
-        self.total_checker.check(total_votes)
+        self.total_count_checker.check(total_votes)
         if len(all_candidates) < total_votes:
             raise VoteError(f'duplicated candidates: {vote}')
         for cand in all_candidates:
@@ -315,19 +355,27 @@ class ScoreVoteValidator:
                  sum_bounds: Union[
                      NumBoundsTupleType, Dict[int, NumBoundsTupleType]
                  ] = (None, None),
+                 n_scorings_checker: Optional[VoteMagnitudeChecker] = None,
+                 sum_checkers: Optional[
+                     Dict[int, VoteMagnitudeChecker]
+                 ] = None,
                  nominator: candidate.Nominator = candidate.BasicNominator(),
                  ):
-        self.n_scorings_checker = VoteMagnitudeChecker(allowed_scorings)
-        if hasattr(sum_bounds, 'items'):
-            no_sc = VoteMagnitudeChecker((None, None), 'sum')
-            self.sum_checkers = collections.defaultdict(lambda: no_sc)
-            for n_scorings, bounds in sum_bounds.items():
-                self.sum_checkers[n_scorings] = VoteMagnitudeChecker(
-                    bounds, 'sum'
-                )
-        else:
-            default_sc = VoteMagnitudeChecker(sum_bounds, 'sum')
-            self.sum_checkers = collections.defaultdict(lambda: default_sc)
+        if n_scorings_checker is None:
+            n_scorings_checker = VoteMagnitudeChecker(allowed_scorings)
+        if sum_checkers is None:
+            if hasattr(sum_bounds, 'items'):
+                no_sc = VoteMagnitudeChecker((None, None), 'sum')
+                sum_checkers = collections.defaultdict(lambda: no_sc)
+                for n_scorings, bounds in sum_bounds.items():
+                    sum_checkers[n_scorings] = VoteMagnitudeChecker(
+                        bounds, 'sum'
+                    )
+            else:
+                default_sc = VoteMagnitudeChecker(sum_bounds, 'sum')
+                sum_checkers = collections.defaultdict(lambda: default_sc)
+        self.n_scorings_checker = n_scorings_checker
+        self.sum_checkers = sum_checkers
         self.nominator = nominator
 
     def validate(self, vote: ScoreVoteType) -> bool:
@@ -348,6 +396,7 @@ class ScoreVoteValidator:
             sum_checker.check(sum(scoring[1] for scoring in vote))
 
 
+@simple_serialization
 class EnumScoreVoteValidator(ScoreVoteValidator):
     '''Validate an enumeration-based score vote.
 
@@ -366,24 +415,46 @@ class EnumScoreVoteValidator(ScoreVoteValidator):
     :param allowed_scorings: A tuple with lower and upper bounds
         (inclusive) for the number of candidates allowed to appear in any
         single vote. None means the respective bound is not checked.
+        Ignored if n_scorings_checker is given.
     :param sum_bounds: A tuple with lower and upper bounds
         (inclusive) for the total sum of numeric scores allowed for any
         single vote. None means the respective bound is not checked. You can
         also provide a dictionary that gives different sum bounds for different
         numbers of candidates scored (numbers of candidates scored that do not
         have a corresponding key will not have their sums checked then).
+        Ignored if sum_checkers are given.
+    :param n_scorings_checker: A :class:`VoteMagnitudeChecker` that checks the
+        total number of candidates any vote can score.
+    :param sum_checkers: A mapping of integer numbers of scored
+        candidates to instances of :class:`VoteMagnitudeChecker` checking the
+        allowed total score allocated to all candidates.
     :param nominator: Nominator used to check candidates. The default uses only
         technical criteria specified by the :class:`Candidate` class.
     '''
+    serialize_params = [
+        'score_levels',
+        'n_scorings_checker',
+        'sum_checkers',
+        'nominator'
+    ]
+
     def __init__(self,
                  score_levels: Collection[Any],
                  allowed_scorings: IntBoundsTupleType = (None, None),
                  sum_bounds: Union[
                      NumBoundsTupleType, Dict[int, NumBoundsTupleType]
                  ] = (None, None),
+                 n_scorings_checker: Optional[VoteMagnitudeChecker] = None,
+                 sum_checkers: Optional[
+                     Dict[int, VoteMagnitudeChecker]
+                 ] = None,
                  nominator: candidate.Nominator = candidate.BasicNominator(),
                  ):
-        super().__init__(allowed_scorings, sum_bounds, nominator)
+        super().__init__(
+            allowed_scorings, sum_bounds,
+            n_scorings_checker, sum_checkers,
+            nominator
+        )
         self.score_levels = list(score_levels)
 
     def validate(self, vote: ScoreVoteType) -> bool:
@@ -405,6 +476,7 @@ class EnumScoreVoteValidator(ScoreVoteValidator):
                 raise VoteValueError(score, cand, self.score_levels)
 
 
+@simple_serialization
 class RangeVoteValidator(ScoreVoteValidator):
     '''Validate a range (non-enumerative score) vote.
 
@@ -423,22 +495,47 @@ class RangeVoteValidator(ScoreVoteValidator):
     :param allowed_scorings: A tuple with lower and upper bounds
         (inclusive) for the number of candidates allowed to appear in any
         single vote. None means the respective bound is not checked.
+        Ignored if n_scorings_checker is given.
     :param sum_bounds: A tuple with lower and upper bounds
         (inclusive) for the total sum of numeric scores allowed for any
         single vote. None means the respective bound is not checked.
+        Ignored if sum_checkers are given.
+    :param n_scorings_checker: A :class:`VoteMagnitudeChecker` that checks the
+        total number of candidates any vote can score.
+    :param sum_checkers: A mapping of integer numbers of scored
+        candidates to instances of :class:`VoteMagnitudeChecker` checking the
+        allowed total score allocated to all candidates.
     :param nominator: Nominator used to check candidates. The default uses only
         technical criteria specified by the :class:`Candidate` class.
     '''
+    serialize_params = [
+        'range_checker',
+        'n_scorings_checker',
+        'sum_checkers',
+        'nominator'
+    ]
+
     def __init__(self,
                  range: NumBoundsTupleType = (None, None),
                  allowed_scorings: IntBoundsTupleType = (None, None),
                  sum_bounds: Union[
                      NumBoundsTupleType, Dict[int, NumBoundsTupleType]
                  ] = (None, None),
+                 range_checker: Optional[VoteMagnitudeChecker] = None,
+                 n_scorings_checker: Optional[VoteMagnitudeChecker] = None,
+                 sum_checkers: Optional[
+                     Dict[int, VoteMagnitudeChecker]
+                 ] = None,
                  nominator: candidate.Nominator = candidate.BasicNominator(),
                  ):
-        super().__init__(allowed_scorings, sum_bounds, nominator)
-        self.range_checker = VoteMagnitudeChecker(range, 'range vote value')
+        super().__init__(
+            allowed_scorings, sum_bounds,
+            n_scorings_checker, sum_checkers,
+            nominator
+        )
+        if range_checker is None:
+            range_checker = VoteMagnitudeChecker(range, 'range vote value')
+        self.range_checker = range_checker
 
     def validate(self, vote: ScoreVoteType) -> bool:
         '''Check if the range vote is valid.
@@ -479,6 +576,7 @@ class VoteSubsetter(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
+@simple_serialization
 class SimpleSubsetter:
     '''A subsetter for simple votes.'''
 
@@ -490,6 +588,7 @@ class SimpleSubsetter:
         return vote if vote in subset else None
 
 
+@simple_serialization
 class ApprovalSubsetter:
     '''A subsetter for approval votes.'''
 
@@ -504,6 +603,7 @@ class ApprovalSubsetter:
         return vote.intersection(subset)
 
 
+@simple_serialization
 class RankedSubsetter:
     '''A subsetter for ranked votes.'''
     # TODO: implement keeping ranks as skipped
@@ -534,6 +634,7 @@ class RankedSubsetter:
         return tuple(sub_ranking)
 
 
+@simple_serialization
 class ScoreSubsetter:
     '''A subsetter for score votes.'''
 
