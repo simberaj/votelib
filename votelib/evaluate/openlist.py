@@ -78,6 +78,7 @@ class ThresholdOpenList:
                  list_precedence: bool = False,
                  ):
         self.jump_fraction = jump_fraction
+        self.quota_fraction = quota_fraction
         if quota_function is not None and quota_fraction != 1:
             wrapped = quota.construct(quota_function)
 

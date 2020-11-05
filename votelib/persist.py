@@ -1,6 +1,7 @@
 
 import sys
 import inspect
+import builtins
 import importlib
 from fractions import Fraction
 from decimal import Decimal
@@ -54,9 +55,11 @@ def serialize_value(value: Any) -> Any:
                     for key, val in value.items()
                 }
             else:
-                raise NotImplementedError(
-                    'serializing a dictionary with nonstring keys'
-                )
+                return {
+                    'type': 'dict',
+                    'keys': [serialize_value(key) for key in value.keys()],
+                    'values': [serialize_value(val) for val in value.values()]
+                }
         else:
             return [serialize_value(val) for val in value]
     elif hasattr(value, '__call__'):
@@ -85,12 +88,20 @@ def deserialize_value(value: Any) -> Any:
 
 def deserialize_typed(typedef: Dict[str, Any]) -> Any:
     typeobj = get_object(typedef['type'])
-    if 'value' in typedef:
-        return typeobj(typedef['value'])
+    if typeobj is dict:
+        return dict(zip(
+            [deserialize_value(key) for key in typedef['keys']],
+            [deserialize_value(val) for val in typedef['values']]
+        ))
+    elif 'value' in typedef:
+        return typeobj(deserialize_value(typedef['value']))
     elif 'arguments' in typedef:
-        return typeobj(*typedef['arguments'])
+        return typeobj(*[deserialize_value(val) for val in typedef['arguments']])
     elif 'parameters' in typedef:
-        return typeobj(**typedef['parameters'])
+        return typeobj(**{
+            param: deserialize_value(val)
+            for param, val in typedef['parameters'].items()
+        })
     else:
         raise ValueError(f'invalid typed value contents: {typedef!r}')
 
@@ -109,7 +120,11 @@ def deserialize_class(clsdef: Dict[str, Any]) -> Any:
 
 def get_object(identifier: str) -> Any:
     if '.' not in identifier:
-        return globals()[identifier]
+        global_vars = globals()
+        if identifier in global_vars:
+            return global_vars[identifier]
+        else:
+            return getattr(builtins, identifier)
     else:
         module, name = identifier.rsplit('.', 1)
         if module not in sys.modules:

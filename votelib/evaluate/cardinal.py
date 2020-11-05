@@ -48,10 +48,10 @@ class ScoreVoting:
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        return dict(
-            {'class': persist.scoped_class_name(self)},
-            **self._agg.to_dict()
-        )
+        return {
+            **self._agg.to_dict(),
+            'class': persist.scoped_class_name(self)
+        }
 
     def evaluate(self,
                  votes: Dict[ScoreVoteType, int],
@@ -116,13 +116,18 @@ class MajorityJudgment:
             truncation=truncation,
             bottom_value=bottom_value,
         )
+        self.tie_breaking = tie_breaking
         self.tie_breaker = getattr(self, '_tiebreak_' + tie_breaking)
 
     def to_dict(self) -> Dict[str, Any]:
-        return dict(
-            {'class': persist.scoped_class_name(self)},
-            **self._agg.to_dict()
-        )
+        out = {
+            'class': persist.scoped_class_name(self),
+            'tie_breaking': self.tie_breaking,
+        }
+        for key, val in self._agg.to_dict().items():
+            if key not in ('function', 'class'):
+                out[key] = val
+        return out
 
     def evaluate(self,
                  votes: Dict[Candidate, Dict[Number, int]],
@@ -309,8 +314,8 @@ class STAR:
             'runoff_added_fraction': self.runoff_added_fraction,
             'runoff_evaluator': self.runoff_evaluator.to_dict(),
         }
-        for key, val in self._agg.to_dict():
-            if key != 'function':
+        for key, val in self._agg.to_dict().items():
+            if key not in ('function', 'class'):
                 out[key] = val
         return out
 
