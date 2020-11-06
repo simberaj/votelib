@@ -1,6 +1,7 @@
 # Votelib: Evaluation of voting systems in Python
 
 [![Documentation Status](https://readthedocs.org/projects/votelib/badge/?version=latest)](https://votelib.readthedocs.io/en/latest/?badge=latest)
+[![Test coverage](https://codecov.io/gh/simberaj/votelib/branch/master/graph/badge.svg?token=0YC5FSTL9Z)](https://codecov.io/gh/simberaj/votelib)
 
 Votelib is a package to evaluate results of elections under various systems.
 It aims to provide reliable implementations of many voting systems so that
@@ -47,7 +48,7 @@ used around the world, such as the following:
     -   Transferable vote methods: PR-STV, instant runoff voting and other
         variants with different transfer methods
     -   Condorcet methods: Schulze, Copeland, Minimax, Kemeny-Young,
-        Ranked pairs
+        Ranked pairs, Smith and Schwartz sets
     -   Majority Judgment
     -   Borda count and its variants
     -   Score voting (ordinary and STAR)
