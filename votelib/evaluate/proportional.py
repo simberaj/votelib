@@ -9,6 +9,7 @@ evaluator.
 '''
 
 import bisect
+import decimal
 from fractions import Fraction
 from typing import Dict, Union, Callable
 from numbers import Number
@@ -80,6 +81,35 @@ class PureProportionality:
             cand: cseats - prev_gains.get(cand, 0)
             for cand, cseats in result.items()
         }
+
+
+@simple_serialization
+class VotesPerSeat:
+    def __init__(self,
+                 votes_per_seat: Number,
+                 rounding=decimal.ROUND_DOWN
+                 ):
+        self.votes_per_seat = votes_per_seat
+        self.rounding = rounding
+
+    def evaluate(self,
+                 votes: Dict[Candidate, int],
+                 prev_gains: Dict[Candidate, int] = {},
+                 max_seats: Dict[Candidate, int] = {},
+                 ) -> Dict[Candidate, int]:
+        with decimal.localcontext() as context:
+            context.rounding = self.rounding
+            out = {}
+            for cand, n_votes in votes:
+                entitlement = int(round(
+                    decimal.Decimal(n_votes / self.votes_per_seat),
+                    0
+                ))
+                entitlement = min(entitlement, max_seats.get(cand, INF))
+                entitlement -= prev_gains.get(cand, 0)
+                if entitlement:
+                    out[cand] = entitlement
+        return out
 
 
 @simple_serialization
