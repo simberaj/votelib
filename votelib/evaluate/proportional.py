@@ -16,12 +16,14 @@ from numbers import Number
 from .. import util
 from ..candidate import Candidate
 from ..component import quota, divisor
+from ..persist import simple_serialization
 from . import core
 
 
 INF = float('inf')
 
 
+@simple_serialization
 class PureProportionality:
     '''Distribute seats among candidates strictly proportionally (no rounding).
 
@@ -80,6 +82,7 @@ class PureProportionality:
         }
 
 
+@simple_serialization
 class QuotaDistributor:
     '''Distribute seats proportionally, according to multiples of quota filled.
 
@@ -153,6 +156,7 @@ class QuotaDistributor:
         return selected
 
 
+@simple_serialization
 class LargestRemainder:
     '''Distribute seats proportionally, rounding by largest remainder.
 
@@ -216,6 +220,7 @@ class LargestRemainder:
         return quota_elected
 
 
+@simple_serialization
 class HighestAverages:
     '''Distribute seats proportionally by ordering divided vote counts.
 

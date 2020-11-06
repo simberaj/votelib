@@ -13,9 +13,11 @@ from fractions import Fraction
 from typing import List, FrozenSet, Dict
 
 from ..candidate import Candidate
+from ..persist import simple_serialization
 from . import core
 
 
+@simple_serialization
 class ProportionalApproval:
     '''Proportional Approval Voting (PAV) evaluator. [#wpav]_
 
@@ -112,6 +114,7 @@ class ProportionalApproval:
         )
 
 
+@simple_serialization
 class SequentialProportionalApproval:
     '''Sequential Proportional Approval Voting (SPAV) evaluator. [#wspav]_
 

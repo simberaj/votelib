@@ -14,8 +14,10 @@ from . import core
 from .. import util
 from ..candidate import Candidate, ElectionParty
 from ..component import quota
+from ..persist import simple_serialization
 
 
+@simple_serialization
 class QuotaSelector:
     '''Quota threshold (plurality) selector.
 
@@ -75,6 +77,7 @@ class QuotaSelector:
         return elected
 
 
+@simple_serialization
 class AbsoluteThreshold:
     '''Absolute threshold seatless selector.
 
@@ -109,6 +112,7 @@ class AbsoluteThreshold:
         ]
 
 
+@simple_serialization
 class RelativeThreshold:
     '''Relative threshold seatless selector.
 
@@ -147,6 +151,7 @@ class RelativeThreshold:
         ]
 
 
+@simple_serialization
 class CoalitionMemberBracketer:
     '''Dispatch to different seatless selectors for coalitions.
 
@@ -196,6 +201,7 @@ class CoalitionMemberBracketer:
         ]
 
 
+@simple_serialization
 class PropertyBracketer:
     '''Dispatch to different seatless selectors for some types of parties.
 
@@ -249,6 +255,7 @@ class PropertyBracketer:
         return results
 
 
+@simple_serialization
 class AlternativeThresholds:
     '''An OR function for threshold evaluators.
 
@@ -300,6 +307,7 @@ class AlternativeThresholds:
         return list(sorted(all_results, key=mean_rank))
 
 
+@simple_serialization
 class PreviousGainThreshold:
     '''A threshold on gained seats in previous election rounds.
 

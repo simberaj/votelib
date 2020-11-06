@@ -23,8 +23,10 @@ wrap it into a formalized and named election system.
 '''
 
 from . import evaluate
+from .persist import simple_serialization    # noqa: F401
 
 
+@simple_serialization
 class VotingSystem:
     '''A named voting system. Wraps an election evaluator.
 

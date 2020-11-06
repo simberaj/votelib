@@ -13,6 +13,7 @@ from typing import Any, List, Dict, Optional
 from numbers import Number
 
 from ..candidate import Candidate
+from ..persist import simple_serialization
 from .. import util
 
 
@@ -30,6 +31,7 @@ class SpoiledBallotRemover:
 """
 
 
+@simple_serialization
 class RandomUnrankedBallotSelector:
     '''Select candidates by drawing random simple ballots from the tally.
 
@@ -57,6 +59,7 @@ class RandomUnrankedBallotSelector:
         return util.select_n_random(votes, n_seats)
 
 
+@simple_serialization
 class Sortitor:
     '''Perform sortition (random sampling) among the candidates.
 
@@ -87,6 +90,7 @@ class Sortitor:
         }, n_seats)
 
 
+@simple_serialization
 class InputOrderSelector:
     '''Select first N candidates as they appear in the vote counts.
 

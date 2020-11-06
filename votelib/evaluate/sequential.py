@@ -14,10 +14,12 @@ from numbers import Number
 from ..candidate import Candidate
 from ..vote import RankedVoteType
 from ..component import transfer, quota
+from ..persist import simple_serialization
 from . import core
 from .. import util
 
 
+@simple_serialization
 class TransferableVoteSelector:
     '''Select candidates by eliminating and transfering votes among them.
 
@@ -263,6 +265,7 @@ class TransferableVoteSelector:
 
 
 # Gradual preference addition
+@simple_serialization
 class PreferenceAddition:
     '''Evaluates ranked votes by stepwise addition of lower preferences.
 

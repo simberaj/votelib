@@ -172,9 +172,8 @@ def de_bdt_2017_votes():
     return wahlkreis_votes, party_votes
 
 
-def test_de_bdt_2017(de_bdt_2017_votes):
-    # https://www.bundeswahlleiter.de/dam/jcr/3f3d42ab-faef-4553-bdf8-ac089b7de86a/btw17_heft3.pdf
-    wahlkreis_votes, party_votes = de_bdt_2017_votes
+def get_de_bdt_evaluator():
+    sainte_lague = votelib.evaluate.proportional.HighestAverages('sainte_lague')
     land_inhab = {
         'Schleswig-Holstein': 2673803,
         'Hamburg': 1525090,
@@ -193,7 +192,6 @@ def test_de_bdt_2017(de_bdt_2017_votes):
         'Sachsen-Anhalt': 2145671,
         'Thüringen': 2077901,
     }
-    sainte_lague = votelib.evaluate.proportional.HighestAverages('sainte_lague')
     land_seats = sainte_lague.evaluate(land_inhab, 598)
     land_wk_eval = votelib.evaluate.core.ByConstituency(
         votelib.evaluate.core.PostConverted(
@@ -221,7 +219,7 @@ def test_de_bdt_2017(de_bdt_2017_votes):
         ]),
         sainte_lague
     )
-    total_eval = votelib.evaluate.FixedSeatCount(
+    return votelib.evaluate.FixedSeatCount(
         votelib.evaluate.core.MultistageDistributor([
             land_wk_eval,
             votelib.evaluate.core.PreConverted(
@@ -240,6 +238,12 @@ def test_de_bdt_2017(de_bdt_2017_votes):
         ], depth=2),
         598
     )
+    
+
+def test_de_bdt_2017(de_bdt_2017_votes):
+    # https://www.bundeswahlleiter.de/dam/jcr/3f3d42ab-faef-4553-bdf8-ac089b7de86a/btw17_heft3.pdf
+    wahlkreis_votes, party_votes = de_bdt_2017_votes
+    total_eval = get_de_bdt_evaluator()
     land_result = total_eval.evaluate([wahlkreis_votes, party_votes])
     bund_result = votelib.convert.MergedDistributions().convert(land_result)
     assert bund_result == {
@@ -249,3 +253,11 @@ def test_de_bdt_2017(de_bdt_2017_votes):
     assert land_result['Mecklenburg-Vorpommern'] == {
         'CDU': 6, 'SPD': 2, 'AfD': 3, 'FDP': 1, 'DIE LINKE': 3, 'GRÜNE': 1
     }
+
+
+def get_evaluators():
+    return [
+        get_de_bdt_evaluator(),
+        NZ_ELECTORATE_EVAL,
+        NZ_PARTYLIST_EVAL,
+    ]
