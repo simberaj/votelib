@@ -51,11 +51,31 @@ VOTES = {
         tuple('BC'): 14,
         tuple('CA'): 3,
     },
+    'cw_wiki': {
+        tuple('AB'): 186,
+        tuple('AC'): 405,
+        tuple('BA'): 305,
+        tuple('BC'): 272,
+        tuple('CA'): 78,
+        tuple('CB'): 105,
+    },
+    'cw_wiki_mj': {
+        tuple('ABC'): 35,
+        tuple('CBA'): 34,
+        tuple('BCA'): 31,
+    },
+    'cw_wiki_borda': {
+        tuple('ABC'): 3,
+        tuple('BCA'): 2,
+    }
 }
 
 CONDORCET_WINNERS = {
     'tennessee': 'N',
     'noncw_minimax': 'A',
+    'cw_wiki': 'B',
+    'cw_wiki_mj': 'B',
+    'cw_wiki_borda': 'A',
 }
 
 NONCONDORCET = ['minimax_pwo']
@@ -93,10 +113,9 @@ UNRANKED_AT_BOTTOM = {
     itertools.product(VOTES.keys(), votelib.evaluate.condorcet.EVALUATORS.keys(), range(1, 4))
 )
 def test_condorcet_eval(vote_set_name, eval_key, n_seats):
-    pairagg = votelib.convert.RankedToCondorcetVotes(
+    pair_votes = votelib.convert.RankedToCondorcetVotes(
         unranked_at_bottom=UNRANKED_AT_BOTTOM.get(vote_set_name, True)
-    )
-    pair_votes = pairagg.convert(VOTES[vote_set_name])
+    ).convert(VOTES[vote_set_name])
     all_cands = frozenset(cand for pair in pair_votes.keys() for cand in pair)
     elected = votelib.evaluate.condorcet.EVALUATORS[eval_key].evaluate(pair_votes, n_seats)
     wrapped = votelib.evaluate.core.FixedSeatCount(
@@ -114,3 +133,15 @@ def test_condorcet_eval(vote_set_name, eval_key, n_seats):
     if vote_set_name in RESULTS:
         if eval_key in RESULTS[vote_set_name]:
             assert elected == RESULTS[vote_set_name][eval_key][:n_seats]
+
+
+@pytest.mark.parametrize('vote_set_name', list(VOTES.keys()))
+def test_condorcet_winner(vote_set_name):
+    pair_votes = votelib.convert.RankedToCondorcetVotes(
+        unranked_at_bottom=UNRANKED_AT_BOTTOM.get(vote_set_name, True)
+    ).convert(VOTES[vote_set_name])
+    result = votelib.evaluate.condorcet.CondorcetWinner().evaluate(pair_votes)
+    if vote_set_name in CONDORCET_WINNERS:
+        assert result == [CONDORCET_WINNERS[vote_set_name]]
+    else:
+        assert result == []

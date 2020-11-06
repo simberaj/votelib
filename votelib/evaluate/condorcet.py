@@ -31,7 +31,7 @@ from ..persist import simple_serialization
 
 def pairwise_wins(counts: Dict[Tuple[Candidate, Candidate], int]
                   ) -> List[Tuple[Candidate, Candidate]]:
-    '''Select pairs of candidates where the first is preferred to the second.
+    """Select pairs of candidates where the first is preferred to the second.
 
     :param counts: Condorcet votes (counts of candidate pairs as they appear
         in the voter rankings); use
@@ -39,7 +39,7 @@ def pairwise_wins(counts: Dict[Tuple[Candidate, Candidate], int]
         to produce them from ranked votes.
     :returns: Ordered pairs from the input that are generally preferred to the
         opposite ranking (i.e. listed in this order by more voters).
-    '''
+    """
     wins = []
     for pair, count in counts.items():
         upper_cand, lower_cand = pair
@@ -49,12 +49,46 @@ def pairwise_wins(counts: Dict[Tuple[Candidate, Candidate], int]
     return wins
 
 
+def beat_counts(votes: Dict[Tuple[Candidate, Candidate], int]
+                ) -> Dict[Candidate, int]:
+    n_beats = collections.defaultdict(int)
+    for winner, loser in pairwise_wins(votes):
+        n_beats[winner] += 1
+    return dict(n_beats)
+
+
 class Selector:
     def evaluate(self,
                  votes: Dict[Tuple[Candidate, Candidate], int],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
         raise NotImplementedError
+
+
+@simple_serialization
+class CondorcetWinner:
+    """Condorcet winner selector.
+
+    Selects a candidate that pairwise beats all other candidates, if there
+    is one, or an empty list otherwise.
+    """
+    def evaluate(self,
+                 votes: Dict[Tuple[Candidate, Candidate], int],
+                 ) -> List[Candidate]:
+        """Select the Condorcet winner.
+
+        :param votes: Condorcet votes (counts of candidate pairs as they appear
+            in the voter rankings); use
+            :class:`votelib.convert.RankedToCondorcetVotes`
+            to produce them from ranked votes.
+        """
+        n_required_wins = len(
+            frozenset(cand for pair in votes for cand in pair)
+        ) - 1
+        for cand, n_beats in beat_counts(votes).items():
+            if n_beats == n_required_wins:
+                return [cand]
+        return []
 
 
 @simple_serialization

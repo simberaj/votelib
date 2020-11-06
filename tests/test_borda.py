@@ -125,3 +125,15 @@ def test_chpv_vs_borda():
         converter=votelib.convert.RankedToPositionalVotes(votelib.component.rankscore.Borda()),
         evaluator=MAX_EVAL
     ).evaluate(votes, 1) == ['D']
+
+
+def test_noncw_borda():
+    # https://en.wikipedia.org/wiki/Condorcet_criterion
+    votes = {
+        tuple('ABC'): 3,
+        tuple('BCA'): 2,
+    }
+    assert votelib.evaluate.core.PreConverted(
+        converter=BORDA_AGGS[1],
+        evaluator=MAX_EVAL,
+    ).evaluate(votes, 1) == ['B']
