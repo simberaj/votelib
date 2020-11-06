@@ -141,10 +141,14 @@ def test_condorcet_winner(vote_set_name):
         unranked_at_bottom=UNRANKED_AT_BOTTOM.get(vote_set_name, True)
     ).convert(VOTES[vote_set_name])
     result = votelib.evaluate.condorcet.CondorcetWinner().evaluate(pair_votes)
+    smith = votelib.evaluate.condorcet.SmithSet().evaluate(pair_votes)
+    schwartz = votelib.evaluate.condorcet.SchwartzSet().evaluate(pair_votes)
     if vote_set_name in CONDORCET_WINNERS:
-        assert result == [CONDORCET_WINNERS[vote_set_name]]
+        assert result == smith == schwartz == [CONDORCET_WINNERS[vote_set_name]]
     else:
         assert result == []
+        assert len(smith) != 1
+        assert len(schwartz) != 1
 
 
 @pytest.fixture(scope='module')
