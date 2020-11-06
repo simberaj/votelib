@@ -51,11 +51,31 @@ VOTES = {
         tuple('BC'): 14,
         tuple('CA'): 3,
     },
+    'cw_wiki': {
+        tuple('AB'): 186,
+        tuple('AC'): 405,
+        tuple('BA'): 305,
+        tuple('BC'): 272,
+        tuple('CA'): 78,
+        tuple('CB'): 105,
+    },
+    'cw_wiki_mj': {
+        tuple('ABC'): 35,
+        tuple('CBA'): 34,
+        tuple('BCA'): 31,
+    },
+    'cw_wiki_borda': {
+        tuple('ABC'): 3,
+        tuple('BCA'): 2,
+    }
 }
 
 CONDORCET_WINNERS = {
     'tennessee': 'N',
     'noncw_minimax': 'A',
+    'cw_wiki': 'B',
+    'cw_wiki_mj': 'B',
+    'cw_wiki_borda': 'A',
 }
 
 NONCONDORCET = ['minimax_pwo']
@@ -93,10 +113,9 @@ UNRANKED_AT_BOTTOM = {
     itertools.product(VOTES.keys(), votelib.evaluate.condorcet.EVALUATORS.keys(), range(1, 4))
 )
 def test_condorcet_eval(vote_set_name, eval_key, n_seats):
-    pairagg = votelib.convert.RankedToCondorcetVotes(
+    pair_votes = votelib.convert.RankedToCondorcetVotes(
         unranked_at_bottom=UNRANKED_AT_BOTTOM.get(vote_set_name, True)
-    )
-    pair_votes = pairagg.convert(VOTES[vote_set_name])
+    ).convert(VOTES[vote_set_name])
     all_cands = frozenset(cand for pair in pair_votes.keys() for cand in pair)
     elected = votelib.evaluate.condorcet.EVALUATORS[eval_key].evaluate(pair_votes, n_seats)
     wrapped = votelib.evaluate.core.FixedSeatCount(
@@ -114,3 +133,77 @@ def test_condorcet_eval(vote_set_name, eval_key, n_seats):
     if vote_set_name in RESULTS:
         if eval_key in RESULTS[vote_set_name]:
             assert elected == RESULTS[vote_set_name][eval_key][:n_seats]
+
+
+@pytest.mark.parametrize('vote_set_name', list(VOTES.keys()))
+def test_condorcet_winner(vote_set_name):
+    pair_votes = votelib.convert.RankedToCondorcetVotes(
+        unranked_at_bottom=UNRANKED_AT_BOTTOM.get(vote_set_name, True)
+    ).convert(VOTES[vote_set_name])
+    result = votelib.evaluate.condorcet.CondorcetWinner().evaluate(pair_votes)
+    smith = votelib.evaluate.condorcet.SmithSet().evaluate(pair_votes)
+    schwartz = votelib.evaluate.condorcet.SchwartzSet().evaluate(pair_votes)
+    if vote_set_name in CONDORCET_WINNERS:
+        assert result == smith == schwartz == [CONDORCET_WINNERS[vote_set_name]]
+    else:
+        assert result == []
+        assert len(smith) != 1
+        assert len(schwartz) != 1
+
+
+@pytest.fixture(scope='module')
+def smith_schwartz_test_votes_big():
+    pairwise_vote_matrix = [
+        [0, 9, 1, 9, 9, 9, 9],
+        [1, 0, 9, 9, 9, 9, 9],
+        [9, 1, 0, 1, 9, 9, 9],
+        [1, 1, 9, 0, 5, 9, 9],
+        [1, 1, 1, 5, 0, 9, 9],
+        [1, 1, 1, 1, 1, 0, 9],
+        [1, 1, 1, 1, 1, 1, 0],
+    ]
+    names = list('ABCDEFG')
+    return {
+        (names[i], names[j]): n
+        for i, row in enumerate(pairwise_vote_matrix) for j, n in enumerate(row)
+    }
+
+
+@pytest.fixture(scope='module')
+def smith_schwartz_test_votes_small():
+    return {
+        tuple('AB'): 4,
+        tuple('BC'): 4,
+        tuple('CA'): 3,
+        tuple('AC'): 3,
+        tuple('BA'): 2,
+        tuple('CB'): 2,
+    }
+
+
+def test_smith_big(smith_schwartz_test_votes_big):
+    # https://en.wikipedia.org/wiki/Smith_set
+    assert votelib.evaluate.condorcet.SmithSet().evaluate(
+        smith_schwartz_test_votes_big
+    ) == list('ABCDE')
+
+
+def test_schwartz_big(smith_schwartz_test_votes_big):
+    # https://en.wikipedia.org/wiki/Smith_set
+    assert votelib.evaluate.condorcet.SchwartzSet().evaluate(
+        smith_schwartz_test_votes_big
+    ) == list('ABCD')
+
+
+def test_smith_small(smith_schwartz_test_votes_small):
+    # https://en.wikipedia.org/wiki/Schwartz_set
+    assert votelib.evaluate.condorcet.SmithSet().evaluate(
+        smith_schwartz_test_votes_small
+    ) == list('ABC')
+
+
+def test_schwartz_small(smith_schwartz_test_votes_small):
+    # https://en.wikipedia.org/wiki/Schwartz_set
+    assert votelib.evaluate.condorcet.SchwartzSet().evaluate(
+        smith_schwartz_test_votes_small
+    ) == ['A']

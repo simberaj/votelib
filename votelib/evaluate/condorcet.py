@@ -29,24 +29,64 @@ from ..component import pairwin_scorer
 from ..persist import simple_serialization
 
 
-def pairwise_wins(counts: Dict[Tuple[Candidate, Candidate], int]
+def pairwise_wins(votes: Dict[Tuple[Candidate, Candidate], int],
+                  include_ties: bool = False,
                   ) -> List[Tuple[Candidate, Candidate]]:
-    '''Select pairs of candidates where the first is preferred to the second.
+    """Select pairs of candidates where the first is preferred to the second.
 
-    :param counts: Condorcet votes (counts of candidate pairs as they appear
+    :param votes: Condorcet votes (counts of candidate pairs as they appear
         in the voter rankings); use
         :class:`votelib.convert.RankedToCondorcetVotes`
         to produce them from ranked votes.
+    :param include_ties: Whether to include pairs of candidates that are tied.
+        Such a pair will be included in both directions.
     :returns: Ordered pairs from the input that are generally preferred to the
         opposite ranking (i.e. listed in this order by more voters).
-    '''
+    """
     wins = []
-    for pair, count in counts.items():
+    for pair, count in votes.items():
         upper_cand, lower_cand = pair
-        reversed_pair = (lower_cand, upper_cand)
-        if counts.get(reversed_pair, 0) < count:
+        anti_count = votes.get((lower_cand, upper_cand), 0)
+        if anti_count < count or include_ties and anti_count == count:
             wins.append(pair)
     return wins
+
+
+def beat_counts(votes: Dict[Tuple[Candidate, Candidate], int]
+                ) -> Dict[Candidate, int]:
+    """Count the number of candidates a given candidate beats pairwise.
+
+    :param votes: Condorcet votes (counts of candidate pairs as they appear
+        in the voter rankings); use
+        :class:`votelib.convert.RankedToCondorcetVotes`
+        to produce them from ranked votes.
+    """
+    n_beats = collections.defaultdict(int)
+    for winner, loser in pairwise_wins(votes):
+        n_beats[winner] += 1
+    return dict(n_beats)
+
+
+def _smith_schwartz_set(votes: Dict[Tuple[Candidate, Candidate], int],
+                        ties: bool = True,
+                        ) -> List[Candidate]:
+    wins = pairwise_wins(votes, include_ties=ties)
+    copeland_scores = Copeland.scores(wins)
+    copeland_ordering = list(sorted(
+        copeland_scores,
+        key=copeland_scores.get,
+        reverse=True,
+    ))
+    cand_copes = dict(zip(copeland_ordering, range(len(copeland_ordering))))
+    end_i = 1  # index of first candidate out of smith set
+    # Sort wins so that wins over the most promising candidates go first.
+    wins.sort(key=lambda tup: copeland_ordering.index(tup[1]))
+    for winner, loser in wins:
+        if cand_copes[winner] >= end_i and cand_copes[loser] < end_i:
+            end_i = cand_copes[winner] + 1
+            if end_i == len(copeland_ordering):
+                break
+    return copeland_ordering[:end_i]
 
 
 class Selector:
@@ -55,6 +95,72 @@ class Selector:
                  n_seats: int = 1,
                  ) -> List[Candidate]:
         raise NotImplementedError
+
+
+@simple_serialization
+class CondorcetWinner:
+    """Condorcet winner selector.
+
+    Selects a candidate that pairwise beats all other candidates, if there
+    is one, or an empty list otherwise.
+    """
+    def evaluate(self,
+                 votes: Dict[Tuple[Candidate, Candidate], int],
+                 ) -> List[Candidate]:
+        """Select the Condorcet winner.
+
+        :param votes: Condorcet votes (counts of candidate pairs as they appear
+            in the voter rankings); use
+            :class:`votelib.convert.RankedToCondorcetVotes`
+            to produce them from ranked votes.
+        """
+        n_required_wins = len(
+            frozenset(cand for pair in votes for cand in pair)
+        ) - 1
+        for cand, n_beats in beat_counts(votes).items():
+            if n_beats == n_required_wins:
+                return [cand]
+        return []
+
+
+@simple_serialization
+class SmithSet:
+    """Smith set selector.
+
+    The Smith set is the smallest possible non-empty set whose candidates beat
+    all other candidates in pairwise preference comparisons.
+    """
+    def evaluate(self,
+                 votes: Dict[Tuple[Candidate, Candidate], int],
+                 ) -> List[Candidate]:
+        """Select the Smith set.
+
+        :param votes: Condorcet votes (counts of candidate pairs as they appear
+            in the voter rankings); use
+            :class:`votelib.convert.RankedToCondorcetVotes`
+            to produce them from ranked votes.
+        """
+        return _smith_schwartz_set(votes, ties=True)
+
+
+@simple_serialization
+class SchwartzSet:
+    """Schwartz set selector.
+
+    The Schwartz set is the smallest possible non-empty set whose candidates
+    are pairwise unbeaten by all other candidates.
+    """
+    def evaluate(self,
+                 votes: Dict[Tuple[Candidate, Candidate], int],
+                 ) -> List[Candidate]:
+        """Select the Schwartz set.
+
+        :param votes: Condorcet votes (counts of candidate pairs as they appear
+            in the voter rankings); use
+            :class:`votelib.convert.RankedToCondorcetVotes`
+            to produce them from ranked votes.
+        """
+        return _smith_schwartz_set(votes, ties=False)
 
 
 @simple_serialization
@@ -86,15 +192,21 @@ class Copeland:
         :param n_seats: Number of candidates to select.
         '''
         wins = pairwise_wins(votes)
-        scores = collections.defaultdict(int)
-        for winner, loser in wins:
-            scores[winner] += 1
-            scores[loser] -= 1
+        scores = self.scores(wins)
         best = core.get_n_best(scores, n_seats)
         if self.second_order and core.Tie.any(best):
             return self.break_second_order(best, scores, wins)
         else:
             return best
+
+    @staticmethod
+    def scores(wins: List[Tuple[Candidate, Candidate]]
+               ) -> Dict[Candidate, int]:
+        scores = collections.defaultdict(int)
+        for winner, loser in wins:
+            scores[winner] += 1
+            scores[loser] -= 1
+        return dict(scores)
 
     def break_second_order(self,
                            best: List[Union[Candidate, core.Tie]],

@@ -25,6 +25,7 @@ def test_food():
     }
     assert DEFAULT_STV.evaluate(votes, 3) == ['Chocolate', 'Orange', 'Strawberry']
 
+
 def test_rv_stv():
     # https://rangevoting.org/STVPRunger
     votes = {
@@ -35,6 +36,7 @@ def test_rv_stv():
         tuple('CDB'): 19,
     }
     assert DEFAULT_STV.evaluate(votes, 3) == ['D', 'F', 'B']
+
 
 def test_rv_irv_nightmare_12():
     # https://rangevoting.org/rangeVirv.html#nightmare
@@ -47,6 +49,7 @@ def test_rv_irv_nightmare_12():
     }
     assert DEFAULT_STV.evaluate(votes, 1) == ['D']
 
+
 def test_rv_irv_revfail():
     votes = {
         tuple('BCA'): 9,
@@ -55,6 +58,7 @@ def test_rv_irv_revfail():
     }
     assert DEFAULT_STV.evaluate(votes, 1) == ['A']
     assert DEFAULT_STV.evaluate({tuple(reversed(vote)): n for vote, n in votes.items()}, 1) == ['A']
+
 
 def test_bucklin_tennessee():
     votes = {
@@ -120,6 +124,7 @@ def test_bucklin_equalrank_nosplit():
     assert result[0] == 'A'
     assert set(result[1:]) == {'B', 'C'}
 
+
 SCOTTISH_VOTES = {
     ('Adams', 'Baker'): 35,
     ('Adams', 'Gray', 'Baker'): 84,
@@ -145,6 +150,7 @@ SCOTTISH_VOTES = {
     ('Gray',): 17,
     ('Miller',): 331,
 }
+
 
 def test_stv_scottish():
     # https://www2.gov.scot/Resource/0038/00389095.pdf
@@ -213,3 +219,11 @@ def test_top2_irv_badretainer():
         elim_votes, elim_elected = eval.nth_count(SCOTTISH_VOTES, 1, 2)
 
 
+def test_noncw_irv():
+    # https://en.wikipedia.org/wiki/Condorcet_criterion
+    votes = {
+        tuple('ABC'): 35,
+        tuple('CBA'): 34,
+        tuple('BCA'): 31,
+    }
+    assert DEFAULT_STV.evaluate(votes, 1) == ['C']

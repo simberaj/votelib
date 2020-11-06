@@ -96,7 +96,9 @@ def deserialize_typed(typedef: Dict[str, Any]) -> Any:
     elif 'value' in typedef:
         return typeobj(deserialize_value(typedef['value']))
     elif 'arguments' in typedef:
-        return typeobj(*[deserialize_value(val) for val in typedef['arguments']])
+        return typeobj(*[
+            deserialize_value(val) for val in typedef['arguments']
+        ])
     elif 'parameters' in typedef:
         return typeobj(**{
             param: deserialize_value(val)
