@@ -18,6 +18,8 @@ def simple_serialization(class_: type) -> type:
     to the class's constructor parameter names. Therefore, this decorator
     is only useful when the class stores all its original parameters
     unchanged (or in any other form acceptable to its constructor).
+
+    :param class_: The class to add the method to.
     '''
     if hasattr(class_, 'serialize_params'):
         param_names = class_.serialize_params
@@ -135,6 +137,10 @@ def get_object(identifier: str) -> Any:
 
 
 def from_dict(value: Dict[str, Any]) -> Any:
+    """Parse an election evaluator object from a JSON-like dictionary.
+
+    :param value: A dictionary created by :func:`to_dict`.
+    """
     if not isinstance(value, dict):
         raise ValueError('invalid votelib object def: dict expected,'
                          f'got {value!r}')
@@ -148,6 +154,13 @@ def from_dict(value: Dict[str, Any]) -> Any:
 
 
 def to_dict(obj: Any) -> Dict[str, Any]:
+    """Serialize an election evaluator object to a JSON-ready dictionary.
+
+    :param obj: An election evaluator object or similar. It should provide
+        a `to_dict()` method (all the standard evaluators, converters and the
+        like from Votelib should have it, courtesy of the simple_serialization
+        decorator).
+    """
     return serialize_value(obj)
 
 
