@@ -1,6 +1,7 @@
 
 import sys
 import os
+import decimal
 from fractions import Fraction
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -78,6 +79,7 @@ def test_from_biprop_reg():
     slag = votelib.evaluate.proportional.HighestAverages('sainte_lague')
     assert slag.evaluate(votes, 20) == {'I': 7, 'II': 5, 'III': 8}
 
+
 def test_from_biprop_party():
     votes = {
         'A': 983,
@@ -86,3 +88,24 @@ def test_from_biprop_party():
     }
     slag = votelib.evaluate.proportional.HighestAverages('sainte_lague')
     assert slag.evaluate(votes, 20) == {'A': 5, 'B': 11, 'C': 4}
+
+
+def test_votes_per_seat():
+    votes = {
+        'A': 983,
+        'B': 2040,
+        'C': 782,
+    }
+    vps = votelib.evaluate.proportional.VotesPerSeat(100)
+    assert vps.evaluate(votes) == {'A': 9, 'B': 20, 'C': 7}
+
+def test_votes_per_seat_round_math():
+    votes = {
+        'A': 983,
+        'B': 2040,
+        'C': 782,
+        'D': 1050,
+    }
+    vps = votelib.evaluate.proportional.VotesPerSeat(100, rounding=decimal.ROUND_HALF_UP)
+    assert vps.evaluate(votes) == {'A': 10, 'B': 20, 'C': 8, 'D': 11}
+

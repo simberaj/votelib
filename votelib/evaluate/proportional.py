@@ -85,11 +85,26 @@ class PureProportionality:
 
 @simple_serialization
 class VotesPerSeat:
+    """Award seats for each N votes cast for each candidate.
+
+    This is an old and simple system that was used e.g. in pre-war Germany
+    [#wrstag]_. It divides the number of votes a pre-specified constant and
+    rounds to give the appropriate number of seats.
+
+    :param votes_per_seat: Number of votes required for the candidate to
+        obtain a single seat.
+    :param rounding: A rounding mode from the *decimal* Python library. The
+        default option is to round down, which is the most frequent case,
+        but this evaluator allows to specify a different method as well.
+
+    .. [#wrstag] "Reichstag (Weimarer Republik): Wahlsystem", Wikipedia.
+        https://de.wikipedia.org/wiki/Reichstag_(Weimarer_Republik)#Wahlsystem
+    """
     def __init__(self,
-                 votes_per_seat: Number,
+                 votes_per_seat: int,
                  rounding=decimal.ROUND_DOWN
                  ):
-        self.votes_per_seat = votes_per_seat
+        self.votes_per_seat = decimal.Decimal(votes_per_seat)
         self.rounding = rounding
 
     def evaluate(self,
@@ -100,9 +115,9 @@ class VotesPerSeat:
         with decimal.localcontext() as context:
             context.rounding = self.rounding
             out = {}
-            for cand, n_votes in votes:
+            for cand, n_votes in votes.items():
                 entitlement = int(round(
-                    decimal.Decimal(n_votes / self.votes_per_seat),
+                    decimal.Decimal(n_votes) / self.votes_per_seat,
                     0
                 ))
                 entitlement = min(entitlement, max_seats.get(cand, INF))
