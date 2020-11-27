@@ -248,6 +248,24 @@ class ScoreToSimpleVotes:
 
 
 @simple_serialization
+class RankedToSimpleVotes:
+    '''Aggregate ranked votes to simple votes, taking each voter's first choice.
+
+    This is useful to determine the plurality winner in ranked choice voting
+    systems.
+    '''
+    def convert(self,
+                votes: Dict[RankedVoteType, int],
+                ) -> Dict[Candidate, int]:
+        '''Convert ranked votes to simple votes by taking first choices.'''
+        output = collections.defaultdict(int)
+        for ranking, n_votes in votes.items():
+            if ranking:
+                output[ranking[0]] += n_votes
+        return dict(output)
+
+
+@simple_serialization
 class RankedToPositionalVotes:
     '''Aggregate ranked votes to simple votes.
 
