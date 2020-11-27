@@ -24,12 +24,6 @@ def test_alt_eval():
         == frozenset(['A', 'B', 'C', 'a', 'D', 'b'])
     )
     
-def test_quota_fail():
-    votes = {'A': 100, 'B': 100, 'C': 100, 'D': 80}
-    eval = votelib.evaluate.threshold.QuotaSelector(quota_function='imperiali')
-    with pytest.raises(votelib.evaluate.VotingSystemError):
-        eval.evaluate(votes, 2)
-
 def test_fixed_seats():
     with pytest.raises(ValueError):
         eval = votelib.evaluate.core.FixedSeatCount(

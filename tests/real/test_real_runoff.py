@@ -3,7 +3,7 @@ import sys
 import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-import votelib.evaluate.threshold
+import votelib.evaluate.approval
 
 
 def test_cz_sen_2018_68():
@@ -16,7 +16,7 @@ def test_cz_sen_2018_68():
         'Pavera Herbert Mgr.': 15900,
         'Horáková Simona Mgr.': 9443,
     }
-    evaluator = votelib.evaluate.threshold.QuotaSelector()
+    evaluator = votelib.evaluate.approval.QuotaSelector()
     assert evaluator.evaluate(votes, 1) == []
 
 def test_cz_sen_2018_20():
@@ -30,5 +30,5 @@ def test_cz_sen_2018_20():
         'Mazáč Rudolf Karel Mgr.': 258,
         'Kocman Jiří Ing.': 1251,
     }
-    evaluator = votelib.evaluate.threshold.QuotaSelector()
+    evaluator = votelib.evaluate.approval.QuotaSelector()
     assert evaluator.evaluate(votes, 1) == ['Drahoš Jiří prof. Ing. DrSc.']
