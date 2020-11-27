@@ -58,3 +58,17 @@ def test_spav():
     }
     spav = votelib.evaluate.approval.SequentialProportionalApproval()
     assert spav.evaluate(votes, 3) == list('ABD')
+
+def test_quota_fail():
+    votes = {'A': 100, 'B': 100, 'C': 100, 'D': 80}
+    eval = votelib.evaluate.approval.QuotaSelector(quota_function='imperiali')
+    with pytest.raises(votelib.evaluate.VotingSystemError):
+        eval.evaluate(votes, 2)
+
+def test_quota_select_tie():
+    votes = {'A': 100, 'B': 100, 'C': 100, 'D': 80}
+    ev = votelib.evaluate.approval.QuotaSelector(
+        quota_function='imperiali',
+        on_more_over_quota='select',
+    )
+    assert ev.evaluate(votes, 2) == [votelib.evaluate.core.Tie(['A', 'B', 'C'])] * 2

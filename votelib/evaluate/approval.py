@@ -10,11 +10,13 @@ or satisfaction approval voting (SAV).
 import itertools
 import collections
 from fractions import Fraction
-from typing import List, FrozenSet, Dict
+from numbers import Number
+from typing import List, FrozenSet, Dict, Union, Callable
 
 from ..candidate import Candidate
 from ..persist import simple_serialization
 from . import core
+from ..component import quota
 
 
 @simple_serialization
@@ -162,3 +164,72 @@ class SequentialProportionalApproval:
             else:
                 elected.append(best)
         return elected
+
+
+@simple_serialization
+class QuotaSelector:
+    '''Quota threshold (plurality) selector.
+
+    Elects candidates with more (or also equally many, depending on
+    *accept_equal*) votes than the specified quota.
+    This often gives fewer candidates than the number of seats, and thus
+    usually needs to be accompanied by an another evaluation step. In very rare
+    cases, it might select more candidates than the number of seats.
+
+    This is a component in the following systems:
+
+    -   *Two-round runoff* (usually with the Droop quota and a single seat)
+        where it gives the first-round winner if they have a majority of votes,
+        and no one otherwise.
+
+    It can also serve as a threshold evaluator (eliminator) in proportional
+    systems that restrict the first party seat from being a remainder seat,
+    or a kickstart for Huntington-Hill related methods that are not defined
+    for zero-seat parties.
+
+    :param quota_function: A callable producing the quota threshold from the
+        total number of votes and number of seats.
+    :param accept_equal: Whether to elect candidates that only just reach the
+        quota threshold (this is known to produce some instabilities).
+    :param on_more_over_quota: How to handle the case when more candidates
+        fulfill the quota that there is seats:
+
+        -   ``'error'``: raise a :class:`core.VotingSystemError`,
+        -   ``'select'``: select the candidates with the most votes (possibly
+            producing ties when they are equal).
+    '''
+    def __init__(self,
+                 quota_function: Union[
+                     str, Callable[[int, int], Number]
+                 ] = 'droop',
+                 accept_equal: bool = True,
+                 on_more_over_quota: str = 'error',
+                 ):
+        self.quota_function = quota.construct(quota_function)
+        self.accept_equal = accept_equal
+        self.on_more_over_quota = on_more_over_quota
+
+    def evaluate(self,
+                 votes: Dict[Candidate, int],
+                 n_seats: int = 1,
+                 ) -> List[Candidate]:
+        qval = self.quota_function(
+            sum(votes.values()), n_seats
+        )
+        over_quota = {}
+        unselected = set()
+        for cand, n_votes in votes.items():
+            if n_votes > qval or self.accept_equal and n_votes == qval:
+                over_quota[cand] = n_votes
+            else:
+                unselected.add(cand)
+        if len(over_quota) > n_seats:
+            if self.on_more_over_quota == 'error':
+                raise core.VotingSystemError(
+                    f'wanted {n_seats}, quota gave {len(over_quota)}'
+                )
+            elif self.on_more_over_quota != 'select':
+                raise ValueError(
+                    f'invalid more_over_quota setting: {self.more_over_quota}'
+                )
+        return core.get_n_best(over_quota, n_seats)

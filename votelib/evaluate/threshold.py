@@ -18,66 +18,6 @@ from ..persist import simple_serialization
 
 
 @simple_serialization
-class QuotaSelector:
-    '''Quota threshold (plurality) selector.
-
-    Elects candidates with more (or also equally many, depending on
-    *accept_equal*) votes than the specified quota.
-    This often gives fewer candidates than the number of seats, and thus
-    usually needs to be accompanied by an another evaluation step. In very rare
-    cases, it might select more candidates than the number of seats.
-
-    This is a component in the following systems:
-
-    -   *Two-round runoff* (usually with the Droop quota and a single seat)
-        where it gives the first-round winner if they have a majority of votes,
-        and no one otherwise.
-
-    It can also serve as a threshold evaluator (eliminator) in proportional
-    systems that restrict the first party seat from being a remainder seat,
-    or a kickstart for Huntington-Hill related methods that are not defined
-    for zero-seat parties.
-
-    :param quota_function: A callable producing the quota threshold from the
-        total number of votes and number of seats.
-    :param accept_equal: Whether to elect candidates that only just reach the
-        quota threshold (this is known to produce some instabilities).
-    '''
-    def __init__(self,
-                 quota_function: Union[
-                     str, Callable[[int, int], Number]
-                 ] = 'droop',
-                 accept_equal: bool = True,
-                 ):
-        self.quota_function = quota.construct(quota_function)
-        self.accept_equal = accept_equal
-
-    def evaluate(self,
-                 votes: Dict[Candidate, Number],
-                 n_seats: int = 1,
-                 ) -> List[Candidate]:
-        '''Select candidates that reach a given quota.
-
-        :param votes: Simple votes.
-        :param n_seats: Number of candidates to be selected.
-        '''
-        quota_number = self.quota_function(
-            sum(votes.values()), n_seats
-        )
-        elected = []
-        for cand, n_votes in util.sorted_votes(votes):
-            if n_votes > quota_number:
-                elected.append(cand)
-            elif self.accept_equal and n_votes == quota_number:
-                elected.append(cand)
-        if len(elected) > n_seats:
-            raise core.VotingSystemError(
-                f'wanted {n_seats}, quota gave {len(elected)}'
-            )
-        return elected
-
-
-@simple_serialization
 class AbsoluteThreshold:
     '''Absolute threshold seatless selector.
 
