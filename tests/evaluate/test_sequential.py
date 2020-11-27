@@ -35,7 +35,7 @@ def test_rv_stv():
         tuple('DCEF'): 20,
         tuple('CDB'): 19,
     }
-    assert DEFAULT_STV.evaluate(votes, 3) == ['D', 'F', 'B']
+    assert DEFAULT_STV.evaluate(votes, 3) == ['D', 'B', 'F']
 
 
 def test_rv_irv_nightmare_12():
@@ -123,6 +123,17 @@ def test_bucklin_equalrank_nosplit():
     result = eval.evaluate(votes, 3)
     assert result[0] == 'A'
     assert set(result[1:]) == {'B', 'C'}
+
+
+def test_stv_distributor():
+    votes = {
+        ('A', 'B'): 65,
+        ('C', 'A', 'B'): 15,
+        ('B', 'A'): 28,
+        ('C', 'B', 'A'): 12,
+    }
+    ev = votelib.evaluate.sequential.TransferableVoteDistributor()
+    assert ev.evaluate(votes, 3) == {'A': 2, 'B': 1}
 
 
 SCOTTISH_VOTES = {

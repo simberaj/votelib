@@ -4,23 +4,25 @@ This hosts mainly the transferable vote evaluator
 (:class:`TransferableVoteSelector`) but also its less known relative,
 :class:`PreferenceAddition`.
 '''
-
+import operator
+import sys
 import itertools
 import collections
 from fractions import Fraction
-from typing import List, Dict, Tuple, Union, Callable, Optional
+from typing import Any, List, Dict, Tuple, Union, Callable, Optional
 from numbers import Number
 
 from ..candidate import Candidate
 from ..vote import RankedVoteType
 from ..component import transfer, quota
 from ..persist import simple_serialization
-from . import core
-from .. import util
+from . import core, proportional
+from .. import util, persist
 
+INF = float('inf')
 
 @simple_serialization
-class TransferableVoteSelector:
+class TransferableVoteDistributor:
     '''Select candidates by eliminating and transfering votes among them.
 
     This is the evaluator for transferable vote selection (since the evaluator
@@ -30,9 +32,13 @@ class TransferableVoteSelector:
     variant is also called instant-runoff voting (IRV).
 
     First, this evaluator looks at first-preference votes. If any of the
-    candidates has at least a specified quota of votes, they are elected and
-    their votes over the quota are redistributed according to their next stated
-    preference. If no candidate has the quota, the candidate with the fewest
+    candidates has at least a specified quota of votes, they are awarded the
+    number of seats according to how many times the quota fits into their
+    number of votes. If they hit their maximum achievable number of seats
+    (if there is one), their votes over the quota are redistributed
+    (reallocated) to other candidates according to the next stated preference.
+
+    If no candidate has the quota, the candidate with the fewest
     currently allocated votes is eliminated and their votes transferred
     according to their next stated preference. Votes that have no further
     stated preferences are called exhausted and are removed from consideration.
@@ -43,11 +49,13 @@ class TransferableVoteSelector:
         candidates to transfer and to whom. It must provide the
         :class:`transfer.VoteTransferer` interface (experimental, stability
         not guaranteed). The basic vote transfer variants are implemented
-        in the :mod:`transfer` module and can be referred to by their names.
+        in the :mod:`transfer` module and can be referred to by their names
+        as strings.
     :param retainer: A selector determining which candidates to retain when
         elimination is to be performed (it may accept a number of seats, which
         will correspond to the number of candidates to retain). If not given,
-        the candidates with the lowest amounts of votes will be eliminated.
+        the candidates with the lowest amounts of currently allocated votes
+        will be eliminated one by one.
     :param eliminate_step: Determines how many candidates to eliminate whenever
         elimination is to be performed. If a negative integer, determines how
         many candidates to eliminate at each step (the default eliminates one
@@ -57,9 +65,11 @@ class TransferableVoteSelector:
         properly.
     :param quota_function: A callable producing the quota threshold from the
         total number of votes and number of seats. The common quota functions
-        can be referenced by string name from the :mod:`quota` module. If not
-        given, no election by quota takes place - the candidates are just
-        eliminated until the desired number remains.
+        can be referenced by string name from the :mod:`quota` module. If
+        None, no election by quota takes place - the candidates are just
+        eliminated until the desired number remains. (Not specifying the quota
+        only works when the maximum numbers of seats per candidate are
+        specified.)
     :param accept_quota_equal: Whether to use non-strict comparison for the
         number of votes against the quota.
     '''
@@ -69,7 +79,7 @@ class TransferableVoteSelector:
                  eliminate_step: Optional[int] = -1,
                  quota_function: Union[
                      str, Callable[[int, int], Number], None
-                 ] = None,
+                 ] = 'droop',
                  accept_quota_equal: bool = True,
                  # use_breakpoints: bool = True, - quota + applied
                  ):
@@ -86,64 +96,97 @@ class TransferableVoteSelector:
         self.eliminate_step = eliminate_step
 
     def evaluate(self,
-                 votes: Dict[RankedVoteType, Number],
-                 n_seats: int = 1,
-                 ) -> List[Candidate]:
-        '''Select candidates by transferable vote.
+                 votes: Dict[RankedVoteType, int],
+                 n_seats: int,
+                 prev_gains: Dict[Candidate, int] = {},
+                 max_seats: Dict[Candidate, int] = {},
+                 ) -> Dict[Candidate, int]:
+        '''Allocate seats to candidates by transferable vote.
 
         :param votes: Ranked votes. Equal rankings are allowed.
-        :param n_seats: Number of candidates to select.
+        :param n_seats: Number of seats to allocate to candidates.
+        :param prev_gains: Seats gained by the candidate/party in previous
+            election rounds to be subtracted from the result awarded here.
+        :param max_seats: Maximum number of seats that the given
+            candidate/party can obtain in total (including previous gains).
         '''
-        return self.nth_count(votes, n_seats, 1000000000000)[1]
+        return self.nth_count(
+            votes,
+            n_seats,
+            sys.maxsize,    # this is not maximum int value but an equivalent
+            prev_gains=prev_gains,
+            max_seats=max_seats,
+        )[1]
 
     def next_count(self,
                    allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
-                   quota: Number,
-                   n_rem_seats: int,
+                   n_seats: int,
+                   total_n_votes: Number,
+                   prev_gains: Dict[Candidate, int] = {},
+                   max_seats: Dict[Candidate, int] = {},
                    ) -> Tuple[
                        Dict[Candidate, Dict[RankedVoteType, Number]],
-                       List[Candidate]
+                       Dict[Candidate, int]
                    ]:
         '''Advance the transferable voting process by one iteration (count).
 
         :param allocation: Current allocation of ranked votes to candidates
             still contesting the remaining seats.
-        :param quota: Current value of the vote quota to elect a candidate.
-        :param n_rem_seats: Number of seats not yet filled.
-        :returns: A 2-tuple containing the new allocation of votes and a list
-            of newly elected candidates (might be empty).
+        :param n_seats: Total number of seats to award.
+        :param total_n_votes: The total number of votes cast in the election.
+            Used to determine the election quota, if enabled.
+        :param prev_gains: Numbers of seats the candidates gained in the
+            previous counts of the election.
+        :param max_seats: Maximum number of seats that the given
+            candidate/party can obtain in total (including previous gains).
+        :returns: A 2-tuple containing the new allocation of votes and
+            a mapping of candidates to newly assigned seats (might be empty if
+            no seats were awarded on this count).
         '''
-        totals = {
-            cand: sum(cand_votes.values())
-            for cand, cand_votes in allocation.items()
+        n_rem_seats = n_seats - sum(prev_gains.values())
+        avail_seats = {
+            cand: max_seats.get(cand, INF) - prev_gains.get(cand, 0)
+            for cand in allocation.keys()
         }
-        if len(totals) <= n_rem_seats:
-            # all over count are eliminated, elect all remaining and end
-            return {}, core.get_n_best(totals, len(totals))
-        quota_elected = self._elect_by_quota(totals, quota, n_rem_seats)
-        if quota_elected:
-            return self.transferer.transfer(
-                allocation,
-                elected={cand: quota for cand in quota_elected},
-            ), quota_elected
+        if sum(avail_seats.values()) == n_rem_seats:
+            return {}, avail_seats    # elect all remaining, no choice
         else:
-            # nobody elected by quota, we have to eliminate
-            retained = self._select_retained(totals)
-            newly_eliminated = [
-                cand for cand in totals.keys()
-                if cand not in retained
-            ]
-            return self.transferer.transfer(
-                allocation, eliminated=newly_eliminated
-            ), []
+            totals = {
+                cand: sum(cand_votes.values())
+                for cand, cand_votes in allocation.items()
+            }
+            quota_val = self._compute_quota(total_n_votes, n_seats)
+            quota_elected = self._elect_by_quota(
+                totals,
+                quota_val,
+                n_rem_seats,
+                prev_gains=prev_gains,
+                max_seats=max_seats
+            )
+            if quota_elected:
+                return self._transfer_elected(
+                    allocation, quota_elected, quota_val, prev_gains, max_seats
+                ), quota_elected
+            else:
+                # nobody elected by quota, we have to eliminate
+                retained = self.select_retained(totals)
+                eliminated = [
+                    cand for cand in totals.keys()
+                    if cand not in retained
+                ]
+                return self.transferer.transfer(
+                    allocation, eliminated
+                ), {}
 
     def nth_count(self,
                   votes: Dict[RankedVoteType, Number],
                   n_seats: int = 1,
                   count_number: int = 1,
+                  prev_gains: Dict[Candidate, int] = {},
+                  max_seats: Dict[Candidate, int] = {},
                   ) -> Tuple[
                       Dict[Candidate, Dict[RankedVoteType, Number]],
-                      List[Candidate]
+                      Dict[Candidate, int]
                   ]:
         '''Get the intermediate counting state at a given iteration (count).
 
@@ -155,30 +198,156 @@ class TransferableVoteSelector:
         '''
         allocation = self.first_preference_allocation(votes)
         new_allocation = None
-        if self.quota_function:
-            quota = self.quota_function(sum(votes.values()), n_seats)
-        else:
-            quota = float('inf')
-        elected = []
+        # quota needs to be computed on full votes
+        total_votes = sum(votes.values())
+        seats = prev_gains.copy()
         for count_i in range(count_number):
-            if len(elected) >= n_seats:
+            n_already_elected = sum(seats.values())
+            if n_already_elected == n_seats:
                 break
             if new_allocation is not None:
                 allocation = new_allocation
             new_allocation, newly_elected = self.next_count(
-                allocation, quota, n_seats - len(elected)
+                allocation,
+                n_seats,
+                total_votes,
+                prev_gains=seats,
+                max_seats=max_seats,
             )
             if not newly_elected and new_allocation == allocation:
                 raise core.VotingSystemError('infinite loop in STV')
-            elected += newly_elected
+            util.add_dict_to_dict(seats, newly_elected)
         return {
             cand: sum(cand_votes.values())
             for cand, cand_votes in allocation.items()
-        }, elected[:n_seats]
+        }, seats
 
-    def _select_retained(self,
-                         totals: Dict[Candidate, Number]
-                         ) -> List[Candidate]:
+    def _compute_quota(self,
+                       total_n_votes: Optional[Number],
+                       n_seats: int
+                       ) -> Number:
+        if self.quota_function and total_n_votes and n_seats:
+            return self.quota_function(total_n_votes, n_seats)
+        else:
+            return INF
+
+    def _transfer_elected(self,
+                          allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
+                          elected: Dict[Candidate, int],
+                          quota_val: Number,
+                          prev_gains: Dict[Candidate, int] = {},
+                          max_seats: Dict[Candidate, int] = {},
+                          ):
+        subtracted_alloc = self.transferer.subtract(
+            allocation,
+            {cand: n_seats * quota_val for cand, n_seats in elected.items()}
+        )
+        exhausted = [
+            cand for cand, n_add_seats in elected.items()
+            if n_add_seats + prev_gains.get(cand, 0) == max_seats.get(cand, INF)
+        ]
+        if exhausted:
+            return self.transferer.transfer(
+                subtracted_alloc, exhausted
+            )
+        else:
+            return subtracted_alloc
+
+    def _elect_by_quota(self,
+                        totals: Dict[Candidate, Number],
+                        quota_val: Number,
+                        n_rem_seats: int,
+                        prev_gains: Dict[Candidate, int] = {},
+                        max_seats: Dict[Candidate, int] = {},
+                        ) -> Dict[Candidate, int]:
+        quota_multiples = {}
+        overcounts = {}
+        cand_items = sorted(
+            totals.items(),
+            key=operator.itemgetter(1),
+            reverse=True
+        )
+        for cand, total in cand_items:
+            n_multiples = total // quota_val
+            overcount = total - n_multiples * quota_val
+            if self.accept_quota_equal or overcount:
+                actual_seats = (
+                    min(n_multiples, max_seats.get(cand, INF))
+                    - prev_gains.get(cand, 0)
+                )
+                if actual_seats > 0:
+                    quota_multiples[cand] = actual_seats
+                    overcounts[cand] = overcount
+        if quota_multiples:
+            total_awarded = sum(quota_multiples.values())
+            if total_awarded > n_rem_seats:
+                # Over maximum, we need to select who will get one less seat.
+                quota_multiples = self._correct_overcount(
+                    quota_multiples, overcounts, n_rem_seats
+                )
+        return quota_multiples
+
+    def _correct_overcount(self,
+                           awarded_seats: Dict[Candidate, int],
+                           overcounts: Dict[Candidate, Number],
+                           n_rem_seats: int,
+                           ) -> Dict[Candidate, int]:
+        kept = core.get_n_best(overcounts, n_rem_seats)
+        if any(isinstance(e, core.Tie) for e in kept):
+            raise NotImplementedError('tie in STV quota election')
+        else:
+            return {
+                cand: (n_seats - 1 if cand not in kept else n_seats)
+                for cand, n_seats in awarded_seats
+                if cand in kept or n_seats > 1
+            }
+
+    def first_preference_allocation(self,
+                                    votes: Dict[RankedVoteType, Number],
+                                    ) -> Dict[
+                                        Candidate, Dict[RankedVoteType, Number]
+                                    ]:
+        '''Allocate votes by first preference.
+
+        Performed at the beginning of the first count.
+
+        :param votes: Ranked votes.
+        :returns: The votes dictionary separated into subdictionaries keyed by
+            candidate to whom the votes are allocated.
+        '''
+        first_prefs = {
+            cand: {} for cand in util.all_ranked_candidates(votes)
+        }
+        for vote, n_votes in votes.items():
+            first_pref = vote[0]
+            if isinstance(first_pref, collections.abc.Set):
+                # first rank is shared
+                # we pass this to transferer - we prepend a fictional (None)
+                # eliminated candidate to this vote and have it transferred
+                first_prefs.setdefault(None, {})[(None,) + vote] = n_votes
+            else:
+                first_prefs[first_pref][vote] = n_votes
+        if first_prefs.get(None):
+            split_alloc = self.transferer.transfer(
+                first_prefs, candidates=[None],
+            )
+            for cand_alloc in split_alloc.values():
+                to_remove = []
+                to_update = {}
+                for vote, n_votes in cand_alloc.items():
+                    if vote[0] is None:
+                        to_remove.append(vote)
+                        to_update[vote[1:]] = n_votes
+                for vote in to_remove:
+                    del cand_alloc[vote]
+                cand_alloc.update(to_update)
+            return split_alloc
+        else:
+            return first_prefs
+
+    def select_retained(self,
+                        totals: Dict[Candidate, Number]
+                        ) -> List[Candidate]:
         if self.retainer:
             if core.accepts_seats(self.retainer):
                 n_seats = self._retained_count(totals)
@@ -200,68 +369,86 @@ class TransferableVoteSelector:
         else:
             return min(self.eliminate_step, len(totals) - 1)
 
-    def _elect_by_quota(self,
-                        totals: Dict[Candidate, Number],
-                        quota: Number,
-                        n_rem_seats: int,
-                        ) -> List[Candidate]:
-        fill_quota = {
-            cand: total for cand, total in totals.items()
-            if total > quota or self.accept_quota_equal and total == quota
-        }
-        if fill_quota:
-            if len(fill_quota) > n_rem_seats:
-                new_elected = core.get_n_best(fill_quota, n_rem_seats)
-                if any(isinstance(e, core.Tie) for e in new_elected):
-                    raise NotImplementedError('tie in STV quota election')
-            else:
-                new_elected = core.get_n_best(fill_quota, len(fill_quota))
+
+class TransferableVoteSelector:
+    def __init__(self, *args, **kwargs):
+        if len(args) == 1 and not kwargs and isinstance(args[0], TransferableVoteDistributor):
+            self._inner = args[0]
+        elif '_inner' in kwargs:
+            self._inner = kwargs['_inner']
         else:
-            new_elected = []
-        return new_elected
+            self._inner = TransferableVoteDistributor(*args, **kwargs)
 
-    def first_preference_allocation(self,
-                                    votes: Dict[RankedVoteType, int],
-                                    ) -> Dict[
-                                        Candidate, Dict[RankedVoteType, Number]
-                                    ]:
-        '''Allocate votes by first preference.
+    def evaluate(self,
+                 votes: Dict[RankedVoteType, int],
+                 n_seats: int = 1,
+                 ) -> List[Candidate]:
+        return self.nth_count(votes, n_seats, sys.maxsize)[1]
 
-        Performed at the beginning of the first count.
+    def next_count(self,
+                   allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
+                   n_seats: int,
+                   total_n_votes: Number = None,
+                   ) -> Tuple[
+                       Dict[Candidate, Dict[RankedVoteType, Number]],
+                       List[Candidate]
+                   ]:
+        '''Advance the transferable voting process by one iteration (count).
 
-        :param votes: Ranked votes.
-        :returns: The votes dictionary separated into subdictionaries keyed by
-            candidate to whom the votes are allocated.
+        :param allocation: Current allocation of ranked votes to candidates
+            still contesting the remaining seats.
+        :param n_seats: Total number of seats to award.
+        :param total_n_votes: The total number of votes cast in the election.
+            Used to determine the election quota, if enabled.
+        :returns: A 2-tuple containing the new allocation of votes and
+            a mapping of candidates to newly assigned seats (might be empty if
+            no seats were awarded on this count).
         '''
-        first_prefs = {
-            cand: {} for cand in util.all_ranked_candidates(votes)
+        all_cands = set()
+        for cand, alloc_votes in allocation:
+            all_cands.update(util.all_ranked_candidates(alloc_votes))
+        new_alloc, newly_elected = self._inner.next_count(
+            allocation,
+            n_seats,
+            total_n_votes,
+            max_seats={c: 1 for c in all_cands}
+        )
+        return new_alloc, util.distribution_to_selection(newly_elected)
+
+    def nth_count(self,
+                  votes: Dict[RankedVoteType, Number],
+                  n_seats: int = 1,
+                  count_number: int = 1,
+                  ) -> Tuple[
+                      Dict[Candidate, Dict[RankedVoteType, Number]],
+                      List[Candidate]
+                  ]:
+        '''Get the intermediate counting state at a given iteration (count).
+
+        :param votes: Ranked votes. Equal rankings are allowed.
+        :param n_seats: Number of candidates to select.
+        :param count_number: 1-indexed count number.
+        :returns: A 2-tuple containing the allocation of votes after the given
+            count and a list of elected candidates so far (might be empty).
+        '''
+        all_cands = util.all_ranked_candidates(votes)
+        allocation, elected_dict = self._inner.nth_count(
+            votes,
+            n_seats,
+            count_number,
+            max_seats={c: 1 for c in all_cands}
+        )
+        return allocation, util.distribution_to_selection(elected_dict)
+
+    @property
+    def quota_function(self):
+        return self._inner.quota_function
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'class': persist.scoped_class_name(self),
+            '_inner': self._inner.to_dict(),
         }
-        for vote, n_votes in votes.items():
-            first_pref = vote[0]
-            if isinstance(first_pref, collections.abc.Set):
-                # shared rank
-                # we pass this to transferer - we prepend a fictional
-                # eliminated candidate to this vote and have it transferred
-                first_prefs.setdefault(None, {})[(None,) + vote] = n_votes
-            else:
-                first_prefs[first_pref][vote] = n_votes
-        if first_prefs.get(None):
-            split_alloc = self.transferer.transfer(
-                first_prefs, eliminated=[None],
-            )
-            for cand_alloc in split_alloc.values():
-                to_remove = []
-                to_update = {}
-                for vote, n_votes in cand_alloc.items():
-                    if vote[0] is None:
-                        to_remove.append(vote)
-                        to_update[vote[1:]] = n_votes
-                for vote in to_remove:
-                    del cand_alloc[vote]
-                cand_alloc.update(to_update)
-            return split_alloc
-        else:
-            return first_prefs
 
 
 # Gradual preference addition
