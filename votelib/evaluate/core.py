@@ -166,7 +166,7 @@ class Selector(Evaluator):
         raise NotImplementedError
 
 
-class SeatlessSelector(Selector):
+class SeatlessSelector(Evaluator):
     '''Elect some candidates.
 
     Does not allow to pass a number of seats to determine the number of
@@ -198,6 +198,33 @@ class Distributor(Evaluator):
 
         :param votes: Votes of any type.
         :param n_seats: Number of seats to allocate to candidates.
+        :param prev_gains: Seats gained by the candidate/party in previous
+            election rounds.
+        :param max_seats: Maximum number of seats that the given
+            candidate/party can obtain in total (including previous gains).
+        :returns: Numbers of seats allocated to respective candidates.
+            Candidates with no allocated seats do not appear in the dictionary.
+            The ordering of the dictionary is unspecified.
+        '''
+        raise NotImplementedError
+
+
+class SeatlessDistributor(Evaluator):
+    '''Give seats to candidates based on collective preference.
+
+    The number of seats cannot be specified - it stems from the nature of the
+    election system.
+    '''
+
+    @abc.abstractmethod
+    def evaluate(self,
+                 votes: Dict[Any, int],
+                 prev_gains: Dict[Candidate, int] = {},
+                 max_seats: Dict[Candidate, int] = {},
+                 ) -> Dict[Candidate, int]:
+        '''Determine numbers of seats given to candidates, as a dictionary.
+
+        :param votes: Votes of any type.
         :param prev_gains: Seats gained by the candidate/party in previous
             election rounds.
         :param max_seats: Maximum number of seats that the given

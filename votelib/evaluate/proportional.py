@@ -89,42 +89,70 @@ class VotesPerSeat:
 
     This is an old and simple system that was used e.g. in pre-war Germany
     [#wrstag]_. It divides the number of votes a pre-specified constant and
-    rounds to give the appropriate number of seats.
+    rounds to give the appropriate number of seats. It is also used as an
+    auxiliary evaluator in some other systems with fixed quota.
 
     :param votes_per_seat: Number of votes required for the candidate to
         obtain a single seat.
     :param rounding: A rounding mode from the *decimal* Python library. The
         default option is to round down, which is the most frequent case,
         but this evaluator allows to specify a different method as well.
+    :param accept_equal: If False, whenever the number of votes is exactly
+        divisible by *votes_per_seat*, award one less seat.
 
     .. [#wrstag] "Reichstag (Weimarer Republik): Wahlsystem", Wikipedia.
         https://de.wikipedia.org/wiki/Reichstag_(Weimarer_Republik)#Wahlsystem
     """
     def __init__(self,
                  votes_per_seat: int,
-                 rounding=decimal.ROUND_DOWN
+                 rounding: str = decimal.ROUND_DOWN,
+                 accept_equal: bool = True,
                  ):
-        self.votes_per_seat = decimal.Decimal(votes_per_seat)
+        self.votes_per_seat = votes_per_seat
         self.rounding = rounding
+        self.accept_equal = accept_equal
 
     def evaluate(self,
                  votes: Dict[Candidate, int],
                  prev_gains: Dict[Candidate, int] = {},
                  max_seats: Dict[Candidate, int] = {},
                  ) -> Dict[Candidate, int]:
+        calc_entitlement = self._get_entitlement_computer(sum(votes.values()))
+        out = {}
+        for cand, n_votes in votes.items():
+            entitlement = calc_entitlement(n_votes)
+            if not self.accept_equal and entitlement > 0:
+                if entitlement * self.votes_per_seat == n_votes:
+                    entitlement -= 1
+            entitlement = min(entitlement, max_seats.get(cand, INF))
+            entitlement -= prev_gains.get(cand, 0)
+            if entitlement:
+                out[cand] = entitlement
+        return out
+
+    def _get_entitlement_computer(self,
+                                  total_votes: Number,
+                                  ) -> Callable[[int], int]:
+        is_fractional = (
+            (isinstance(total_votes, int) or isinstance(total_votes, Fraction))
+            and (
+                isinstance(self.votes_per_seat, int)
+                or isinstance(self.votes_per_seat, Fraction)
+            )
+        )
+        if is_fractional and self.rounding == decimal.ROUND_DOWN:
+            return self._fractional_entitlement
+        else:
+            return self._decimal_entitlement
+
+    def _fractional_entitlement(self, n_votes: int) -> int:
+        return int(Fraction(n_votes, self.votes_per_seat))
+
+    def _decimal_entitlement(self, n_votes: int) -> int:
         with decimal.localcontext() as context:
             context.rounding = self.rounding
-            out = {}
-            for cand, n_votes in votes.items():
-                entitlement = int(round(
-                    decimal.Decimal(n_votes) / self.votes_per_seat,
-                    0
-                ))
-                entitlement = min(entitlement, max_seats.get(cand, INF))
-                entitlement -= prev_gains.get(cand, 0)
-                if entitlement:
-                    out[cand] = entitlement
-        return out
+            vps = decimal.Decimal(self.votes_per_seat)
+            return int(round(decimal.Decimal(n_votes) / vps, 0))
 
 
 @simple_serialization
@@ -142,13 +170,17 @@ class QuotaDistributor:
     :param quota_function: A callable producing the quota threshold from the
         total number of votes and number of seats. The common quota functions
         can be referenced by string name from the :mod:`quota` module.
+    :param accept_equal: Whether to consider the candidate elected when
+        their votes exactly equal the quota.
     '''
     def __init__(self,
                  quota_function: Union[
                      str, Callable[[int, int], Number]
                  ] = 'droop',
+                 accept_equal: bool = True,
                  ):
         self.quota_function = quota.construct(quota_function)
+        self.accept_equal = accept_equal
 
     def evaluate(self,
                  votes: Dict[Candidate, int],
@@ -166,7 +198,7 @@ class QuotaDistributor:
         :param max_seats: Maximum number of seats that the given
             candidate/party can obtain in total (including previous gains).
         '''
-        quota_number = self.quota_function(
+        qval = self.quota_function(
             sum(votes.values()), n_seats
         )
         selected = {}
@@ -174,8 +206,12 @@ class QuotaDistributor:
         overshot_candidates = []
         for candidate, n_votes in votes.items():
             n_prev = prev_gains.get(candidate, 0)
-            if n_votes >= quota_number:
-                n_add_seats = int(Fraction(n_votes, quota_number)) - n_prev
+            fulfills_quota = (
+                n_votes > qval
+                or self.accept_equal and n_votes == qval
+            )
+            if fulfills_quota:
+                n_add_seats = int(Fraction(n_votes, qval)) - n_prev
                 if n_add_seats > 0:
                     if n_add_seats + n_prev > max_seats.get(candidate, INF):
                         overshoot = n_add_seats + n_prev
@@ -185,7 +221,7 @@ class QuotaDistributor:
                     selected[candidate] = n_add_seats
         if n_overshot:
             remaining_votes = {
-                cand: n_votes for cand in votes.keys()
+                cand: n_votes for cand, n_votes in votes.items()
                 if cand not in overshot_candidates
             }
             total_gained = {
