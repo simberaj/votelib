@@ -102,7 +102,6 @@ def rae(votes: Dict[Candidate, Number],
     :param results: Seat counts awarded to each candidate.
     """
     paired_fractions = _vote_seat_fractions(votes, results)
-    print(paired_fractions)
     return sum(
         abs(vote_frac - seat_frac)
         for vote_frac, seat_frac in paired_fractions.values()

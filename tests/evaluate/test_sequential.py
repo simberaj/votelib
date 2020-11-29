@@ -181,7 +181,6 @@ def test_stv_scottish():
     }
     assert first_count_elect == ['Campbell']
     second_count_res, second_count_elect = DEFAULT_STV.nth_count(SCOTTISH_VOTES, 3, 2)
-    print(second_count_res)
     assert {
         c: int(v) for c, v in second_count_res.items()
     } == {

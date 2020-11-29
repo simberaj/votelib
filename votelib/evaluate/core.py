@@ -638,7 +638,7 @@ class PreConverted:
         self.converter = converter
         self.evaluator = evaluator
 
-    def evaluate(self, votes, n_seats, *args, **kwargs):
+    def evaluate(self, votes, *args, **kwargs):
         '''Convert the votes by and evaluate them through the evaluator.
 
         All other arguments are passed through to the evaluator.
@@ -646,9 +646,8 @@ class PreConverted:
         :param votes: Votes to be passed to the converter.
         :param n_seats: Number of seats to allocate by the evaluator.
         '''
-        return self.evaluator.evaluate(
-            self.converter.convert(votes), n_seats, *args, **kwargs
-        )
+        conv_votes = self.converter.convert(votes)
+        return self.evaluator.evaluate(conv_votes, *args, **kwargs)
 
 
 @simple_serialization
@@ -671,15 +670,17 @@ class Conditioned:
     def __init__(self,
                  eliminator: SeatlessSelector,
                  evaluator: Evaluator,
-                 subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
+                 subsetter: Optional[convert.SubsettedVotes] = None,
                  ):
         self.eliminator = eliminator
         self.evaluator = evaluator
+        if subsetter is None:
+            subsetter = convert.SubsettedVotes(vote.SimpleSubsetter())
         self.subsetter = subsetter
 
     def evaluate(self,
                  votes: Dict[Any, int],
-                 n_seats: int,
+                 n_seats: Optional[int] = None,
                  prev_gains: Dict[Candidate, int] = {},
                  **kwargs) -> Union[List[Candidate], Dict[Candidate, int]]:
         '''Evaluate the main evaluator for variants that passed the eliminator.
@@ -699,15 +700,16 @@ class Conditioned:
             )
         else:
             not_eliminated = self.eliminator.evaluate(votes)
-        elim_votes = convert.SubsettedVotes(self.subsetter).convert(
-            votes, not_eliminated
-        )
+        elim_votes = self.subsetter.convert(votes, not_eliminated)
         if accepts_prev_gains(self.evaluator):
             kwargs = kwargs.copy()
             kwargs['prev_gains'] = prev_gains
-        return self.evaluator.evaluate(
-            elim_votes, n_seats, **kwargs
-        )
+        if accepts_seats(self.evaluator):
+            return self.evaluator.evaluate(
+                elim_votes, n_seats, **kwargs
+            )
+        else:
+            return self.evaluator.evaluate(elim_votes, **kwargs)
 
 
 @simple_serialization
@@ -732,12 +734,13 @@ class ByConstituency:
         Can also be an integer stating the uniformly valid number of seats for
         each constituency, or a dictionary giving the numbers per constituency.
         If None, the number of seats must be specified to :meth:`evaluate`.
-    :param selector: An optional selection evaluator to select candidates
+    :param preselector: An optional selection evaluator to select candidates
         eligible for constituency-wise evaluation. Votes for candidates that
         do not pass its selection will be removed for all constituencies before
         evaluation. If not given, no preselection will be applied.
-    :param vote_subsetter: A subsetter to subset a vote to just concern the
-        candidates returned by the selector.
+    :param subsetter: A subsetter to subset a vote to just concern the
+        candidates returned by the selector. The default option needs to be
+        modified if the votes are more deeply nested.
     '''
     def __init__(self,
                  evaluator: Evaluator,
@@ -786,7 +789,9 @@ class ByConstituency:
             (including previous gains).
         :returns: Results of the evaluation by constituency.
         '''
-        apportionment = self._apportion(votes, n_seats)
+        apportionment = apportion(
+            votes, n_seats, apportioner=self.apportioner
+        )
         preselected = self._preselect(votes, n_seats)
         results = {}
         no_value_districts = []
@@ -829,30 +834,6 @@ class ByConstituency:
                 )
             else:
                 return self.evaluator.evaluate(votes, n_seats)
-
-    def _apportion(self, votes, n_seats):
-        if isinstance(self.apportioner, int):
-            # fixed seats for each constituency
-            return {c: self.apportioner for c in votes.keys()}
-        elif hasattr(self.apportioner, 'items'):
-            # seats per district are pre-determined statically
-            return self.apportioner
-        elif hasattr(n_seats, 'items'):
-            # seats per district are determined dynamically outside this
-            return self.apportioner
-        elif self.apportioner:
-            ccounts = convert.ConstituencyTotals().convert(votes)
-            if isinstance(n_seats, Number):
-                # apportion seats across districts by number of votes cast
-                return self.apportioner.evaluate(ccounts, n_seats)
-            elif n_seats is None:
-                # apportionment without fixed total
-                return self.apportioner.evaluate(ccounts)
-            else:
-                raise ValueError('unknown apportionment scheme')
-        else:
-            # delegate to subevaluator
-            return collections.defaultdict(lambda: n_seats)
 
     def _preselect(self, votes, n_seats):
         if self.preselector:
@@ -959,6 +940,8 @@ class ByParty:
 
 @simple_serialization
 class FixedSeatCount:
+    accepts_seats = False
+
     '''An evaluator wrapper that provides a fixed seat count.
 
     Useful when the seat count for a given system is predefined and constant.
@@ -1070,12 +1053,26 @@ class PartyListEvaluator:
 
 def accepts_seats(evaluator: Evaluator) -> bool:
     '''Whether evaluator takes seat count as an argument to evaluate().'''
-    return 'n_seats' in inspect.signature(evaluator.evaluate).parameters
+    if hasattr(evaluator, 'accepts_seats'):
+        return evaluator.accepts_seats
+    else:
+        params = inspect.signature(evaluator.evaluate).parameters
+        return 'n_seats' in params or _has_generic(params)
 
 
 def accepts_prev_gains(evaluator: Evaluator) -> bool:
     '''Whether evaluator takes previous gains as an argument to evaluate().'''
     return 'prev_gains' in inspect.signature(evaluator.evaluate).parameters
+
+
+def _has_generic(params: Dict[str, inspect.Parameter]) -> bool:
+    return any(
+        param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD
+        )
+        for param in params.values()
+    )
 
 
 @simple_serialization
@@ -1183,8 +1180,8 @@ class TieBreaking:
                     self._replace_sel_ties(main_result, tie, broken)
         return main_result
 
-    def _collect_ties(self,
-                      result: Union[List[Candidate], Dict[Candidate, int]]
+    @staticmethod
+    def _collect_ties(result: Union[List[Candidate], Dict[Candidate, int]]
                       ) -> Dict[Tie, int]:
         ties = collections.defaultdict(int)
         if hasattr(result, 'items'):
@@ -1197,8 +1194,8 @@ class TieBreaking:
                     ties[elected] += 1
         return ties
 
-    def _replace_distr_ties(self,
-                            result: Dict[Candidate, int],
+    @staticmethod
+    def _replace_distr_ties(result: Dict[Candidate, int],
                             tie: Tie,
                             repl: List[Candidate],
                             ) -> None:
@@ -1206,10 +1203,44 @@ class TieBreaking:
         for cand in repl:
             result[cand] = result.get(cand, 0) + 1
 
-    def _replace_sel_ties(self,
-                          result: Dict[Candidate, int],
+    @staticmethod
+    def _replace_sel_ties(result: List[Candidate],
                           tie: Tie,
                           repl: List[Candidate],
                           ) -> None:
         for cand in repl:
             result[result.index(tie)] = cand
+
+
+def apportion(votes: Dict[Constituency, Dict[Candidate, Number]],
+              n_seats: Union[int, Dict[Constituency, int]],
+              apportioner: Union[
+                  Distributor, Dict[Constituency, int], int, None
+              ] = None,
+              ) -> Dict[Constituency, int]:
+    if isinstance(apportioner, int):
+        # fixed seats for each constituency
+        return {c: apportioner for c in votes.keys()}
+    elif hasattr(apportioner, 'items'):
+        # seats per district are pre-determined statically
+        return apportioner
+    elif hasattr(n_seats, 'items'):
+        # seats per district are determined dynamically outside this
+        return n_seats
+    elif apportioner:
+        constituency_votes = {
+            c: sum(c_votes.values()) for c, c_votes in votes.items()
+        }
+        if isinstance(n_seats, int):
+            # apportion seats across districts by number of votes cast
+            return apportioner.evaluate(constituency_votes, n_seats)
+        elif n_seats is None:
+            # apportionment without fixed total
+            return apportioner.evaluate(constituency_votes)
+        else:
+            raise ValueError('unknown apportionment scheme')
+    elif isinstance(n_seats, int):
+        # delegate to subevaluator
+        return {c: n_seats for c in votes.keys()}
+    else:
+        raise ValueError('invalid apportionment setup')

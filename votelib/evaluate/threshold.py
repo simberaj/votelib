@@ -7,13 +7,12 @@ of them to select; that number is determined by other means.
 '''
 
 from fractions import Fraction
-from typing import Any, List, Dict, Union, Callable, Optional
+from typing import Any, List, Dict, Union, Optional
 from numbers import Number
 
 from . import core
 from .. import util
 from ..candidate import Candidate, ElectionParty
-from ..component import quota
 from ..persist import simple_serialization
 
 

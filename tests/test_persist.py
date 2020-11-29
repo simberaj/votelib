@@ -67,7 +67,6 @@ SCORE_EVALUATORS = [
 def test_roundtrip(evaluator):
     dict_form = votelib.persist.to_dict(evaluator)
     serial = json.dumps(dict_form)
-    print(serial)
     roundtrip_dict_form = votelib.persist.from_dict(json.loads(serial)).to_dict()
     roundtrip = json.dumps(roundtrip_dict_form)
     assert dict_form == roundtrip_dict_form
@@ -79,8 +78,5 @@ def test_score_equal():
         roundtripped = votelib.persist.from_dict(
             json.loads(json.dumps(votelib.persist.to_dict(ev)))
         )
-        print(ev, roundtripped)
-        print(ev.to_dict())
-        print(roundtripped.to_dict())
         for votes_name, votes in test_score.VOTES.items():
             assert ev.evaluate(votes, 1) == roundtripped.evaluate(votes, 1)

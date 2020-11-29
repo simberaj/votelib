@@ -89,7 +89,7 @@ def huntington_hill(order: int) -> Decimal:
 def danish(order: int) -> int:
     '''Danish divisor.
 
-    Forms a sequence 1, 3, 7...
+    Forms a sequence 1, 4, 7...
 
     Extremely favors smaller parties.
     '''
