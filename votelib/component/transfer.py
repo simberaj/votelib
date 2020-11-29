@@ -18,7 +18,7 @@ import itertools
 import bisect
 import functools
 from fractions import Fraction
-from typing import Any, List, Tuple, Dict, FrozenSet, Optional, Collection
+from typing import Any, List, Dict, FrozenSet, Optional, Collection
 from numbers import Number
 
 from ..candidate import Candidate

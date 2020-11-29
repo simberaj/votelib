@@ -16,10 +16,11 @@ from ..candidate import Candidate
 from ..vote import RankedVoteType
 from ..component import transfer, quota
 from ..persist import simple_serialization
-from . import core, proportional
+from . import core
 from .. import util, persist
 
 INF = float('inf')
+
 
 @simple_serialization
 class TransferableVoteDistributor:
@@ -232,7 +233,9 @@ class TransferableVoteDistributor:
             return INF
 
     def _transfer_elected(self,
-                          allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
+                          allocation: Dict[
+                              Candidate, Dict[RankedVoteType, Number]
+                          ],
                           elected: Dict[Candidate, int],
                           quota_val: Number,
                           prev_gains: Dict[Candidate, int] = {},
@@ -244,7 +247,10 @@ class TransferableVoteDistributor:
         )
         exhausted = [
             cand for cand, n_add_seats in elected.items()
-            if n_add_seats + prev_gains.get(cand, 0) == max_seats.get(cand, INF)
+            if (
+                n_add_seats + prev_gains.get(cand, 0)
+                == max_seats.get(cand, INF)
+            )
         ]
         if exhausted:
             return self.transferer.transfer(
@@ -372,7 +378,11 @@ class TransferableVoteDistributor:
 
 class TransferableVoteSelector:
     def __init__(self, *args, **kwargs):
-        if len(args) == 1 and not kwargs and isinstance(args[0], TransferableVoteDistributor):
+        got_inner_pos_arg = (
+            len(args) == 1 and not kwargs
+            and isinstance(args[0], TransferableVoteDistributor)
+        )
+        if got_inner_pos_arg:
             self._inner = args[0]
         elif '_inner' in kwargs:
             self._inner = kwargs['_inner']

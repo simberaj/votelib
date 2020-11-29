@@ -734,12 +734,13 @@ class ByConstituency:
         Can also be an integer stating the uniformly valid number of seats for
         each constituency, or a dictionary giving the numbers per constituency.
         If None, the number of seats must be specified to :meth:`evaluate`.
-    :param selector: An optional selection evaluator to select candidates
+    :param preselector: An optional selection evaluator to select candidates
         eligible for constituency-wise evaluation. Votes for candidates that
         do not pass its selection will be removed for all constituencies before
         evaluation. If not given, no preselection will be applied.
-    :param vote_subsetter: A subsetter to subset a vote to just concern the
-        candidates returned by the selector.
+    :param subsetter: A subsetter to subset a vote to just concern the
+        candidates returned by the selector. The default option needs to be
+        modified if the votes are more deeply nested.
     '''
     def __init__(self,
                  evaluator: Evaluator,
@@ -788,7 +789,7 @@ class ByConstituency:
             (including previous gains).
         :returns: Results of the evaluation by constituency.
         '''
-        apportionment = util.apportion(
+        apportionment = apportion(
             votes, n_seats, apportioner=self.apportioner
         )
         preselected = self._preselect(votes, n_seats)
@@ -1179,8 +1180,8 @@ class TieBreaking:
                     self._replace_sel_ties(main_result, tie, broken)
         return main_result
 
-    def _collect_ties(self,
-                      result: Union[List[Candidate], Dict[Candidate, int]]
+    @staticmethod
+    def _collect_ties(result: Union[List[Candidate], Dict[Candidate, int]]
                       ) -> Dict[Tie, int]:
         ties = collections.defaultdict(int)
         if hasattr(result, 'items'):
@@ -1193,8 +1194,8 @@ class TieBreaking:
                     ties[elected] += 1
         return ties
 
-    def _replace_distr_ties(self,
-                            result: Dict[Candidate, int],
+    @staticmethod
+    def _replace_distr_ties(result: Dict[Candidate, int],
                             tie: Tie,
                             repl: List[Candidate],
                             ) -> None:
@@ -1202,10 +1203,44 @@ class TieBreaking:
         for cand in repl:
             result[cand] = result.get(cand, 0) + 1
 
-    def _replace_sel_ties(self,
-                          result: Dict[Candidate, int],
+    @staticmethod
+    def _replace_sel_ties(result: List[Candidate],
                           tie: Tie,
                           repl: List[Candidate],
                           ) -> None:
         for cand in repl:
             result[result.index(tie)] = cand
+
+
+def apportion(votes: Dict[Constituency, Dict[Candidate, Number]],
+              n_seats: Union[int, Dict[Constituency, int]],
+              apportioner: Union[
+                  Distributor, Dict[Constituency, int], int, None
+              ] = None,
+              ) -> Dict[Constituency, int]:
+    if isinstance(apportioner, int):
+        # fixed seats for each constituency
+        return {c: apportioner for c in votes.keys()}
+    elif hasattr(apportioner, 'items'):
+        # seats per district are pre-determined statically
+        return apportioner
+    elif hasattr(n_seats, 'items'):
+        # seats per district are determined dynamically outside this
+        return n_seats
+    elif apportioner:
+        constituency_votes = {
+            c: sum(c_votes.values()) for c, c_votes in votes.items()
+        }
+        if isinstance(n_seats, int):
+            # apportion seats across districts by number of votes cast
+            return apportioner.evaluate(constituency_votes, n_seats)
+        elif n_seats is None:
+            # apportionment without fixed total
+            return apportioner.evaluate(constituency_votes)
+        else:
+            raise ValueError('unknown apportionment scheme')
+    elif isinstance(n_seats, int):
+        # delegate to subevaluator
+        return {c: n_seats for c in votes.keys()}
+    else:
+        raise ValueError('invalid apportionment setup')

@@ -478,7 +478,7 @@ class BiproportionalEvaluator:
         # Initial result, proportional by parties only.
         # All subsequent modifications preserve this proportionality.
         result = self._initial_solution(votes, n_seats)
-        tgt_district_seats = util.apportion(
+        tgt_district_seats = core.apportion(
             votes, n_seats,
             self.apportioner if self.apportioner is not None else self._eval,
         )
@@ -679,7 +679,7 @@ class BiproportionalEvaluator:
     def _calc_quots(self,
                     votes: Dict[Constituency, Dict[Candidate, int]],
                     district_coefs: Dict[Constituency, int],
-                    party_coefs: Dict[Constituency, int],
+                    party_coefs: Dict[Candidate, Fraction],
                     ) -> Dict[Constituency, Dict[Candidate, Fraction]]:
         '''Calculate fractional seat count apporximators from vote counts
         and coefficients (inverse divisors) in both dimensions.
