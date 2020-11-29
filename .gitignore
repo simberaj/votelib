@@ -105,3 +105,6 @@ venv.bak/
 
 # auxiliary files folder
 src/
+
+# PyCharm project settings
+.idea
