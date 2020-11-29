@@ -9,13 +9,16 @@ evaluator.
 '''
 
 import bisect
+import collections
 import decimal
 from fractions import Fraction
-from typing import Dict, Union, Callable
+from typing import (
+    List, Tuple, Dict, Union, Callable, Optional, Set, Collection
+)
 from numbers import Number
 
-from .. import util
-from ..candidate import Candidate
+from .. import convert, util
+from ..candidate import Candidate, Constituency
 from ..component import quota, divisor
 from ..persist import simple_serialization
 from . import core
@@ -351,89 +354,295 @@ class HighestAverages:
         }
 
 
-'''
+@simple_serialization
 class BiproportionalEvaluator:
+    SIGNPOST_QS: Dict[str, Union[int, Fraction]] = {
+        'd_hondt': 0,
+        'sainte_lague': Fraction(1, 2),
+    }
+
     def __init__(self,
-                 candidate_eval: DistributionEvaluator,
-                 district_eval: Optional[DistributionEvaluator] = None,
+                 divisor_function: Union[
+                     str, Callable[[int], Number]
+                 ] = 'd_hondt',
+                 apportioner: Union[
+                     core.Distributor, Dict[Constituency, int], int, None
+                 ] = None,
+                 signpost_q: Optional[Union[int, Fraction]] = None,
                  ):
-        self.candidate_eval = candidate_eval
-        self.district_eval = district_eval if district_eval else candidate_eval
-        self._agg = convert.ConstituencyVoteAggregator()
+        self.divisor_function = divisor.construct(divisor_function)
+        if signpost_q is None:
+            signpost_q = self._extract_signpost_q(self.divisor_function)
+        self.signpost_q = signpost_q
+        self.apportioner = apportioner
+        self._eval = HighestAverages(self.divisor_function)
+
+    def _extract_signpost_q(self,
+                            fx: Callable[[int], Number],
+                            ) -> Union[int, Fraction]:
+        value = self.SIGNPOST_QS.get(fx.__name__, NotImplemented)
+        if value is NotImplemented:
+            raise NotImplementedError(
+                f'signpost q not known for {fx.__name__}, give it explicitly'
+            )
+        return value
 
     def evaluate(self,
                  votes: Dict[Constituency, Dict[Candidate, int]],
-                 n_seats: int,
+                 n_seats: Union[int, Dict[Constituency, int]],
                  ) -> Dict[Constituency, Dict[Candidate, int]]:
-        # districts = list(votes.keys())
-        # candidates = list(frozenset(
-        #     cand for clist in votes.values() for cand in clist
-        # ))
-        district_sums = {
-            district: sum(dvotes.values())
-            for district, dvotes in votes.items()
-        }
-        district_alloc = self.district_eval.evaluate(district_sums, n_seats)
-        cand_sums = self._agg.aggregate(votes)
-        cand_alloc = self.candidate_eval.evaluate(cand_sums, n_seats)
-        district_mult = {district: 1 for district in district_alloc.keys()}
-        cand_mult = {cand: 1 for cand in cand_alloc.keys()}
-        dist_cand_seats = {}
-        print(district_alloc)
-        print(cand_alloc)
-        i = 1
+        result = self._initial_solution(votes, n_seats)
+        tgt_district_seats = self._apportion(votes, n_seats)
+        district_coefs = {d: 1 for d in votes}
+        party_coefs = self._initial_party_coefs(votes, result)
         while True:
-            print(i)
-            prev_dist_cand_seats = dist_cand_seats
-            # district-wise distribution: make sure each district has its
-            # rightful amount of seats and distribute them among parties
-            # accordingly
-            dist_cand_seats = {}
-            for district, dvotes in votes.items():
-                part_votes = {
-                    cand: cdvotes * cand_mult[cand] * district_mult[district]
-                    for cand, cdvotes in dvotes.items()
-                }
-                dist_cand_seats[district] = self.candidate_eval.evaluate(
-                    part_votes, district_alloc[district]
+            cur_district_seats = convert.ConstituencyTotals().convert(result)
+            districts_under, districts_over = self._districts_unsat(
+                cur_district_seats,
+                tgt_district_seats,
+            )
+            if not (districts_under or districts_over):
+                return result
+            quotients = self._calc_quots(
+                votes, result, district_coefs, party_coefs
+            )
+            districts_labeled, parties_labeled = self._labeled(
+                quotients, result, districts_under, districts_over
+            )
+            districts_under_labeled = list(sorted(
+                d for d in districts_under if d in districts_labeled
+            ))
+            if districts_under_labeled:
+                self._augment_result(
+                    result, districts_labeled, parties_labeled,
+                    districts_under_labeled[0], districts_over
                 )
-            print(dist_cand_seats)
-            if dist_cand_seats == prev_dist_cand_seats:
-                print()
-                print('END')
-                print()
-                return dist_cand_seats
-            # adjust party vote multipliers
-            cand_seats = self._agg.aggregate(dist_cand_seats)
-            print(cand_seats)
-            cand_mult = {
-                cand: cand_alloc[cand] / cur_seats
-                for cand, cur_seats in cand_seats.items()
+            else:
+                adj_coef = self._adj_coef(
+                    quotients,
+                    result,
+                    districts_labeled.keys(),
+                    parties_labeled.keys()
+                )
+                if adj_coef == 0 or adj_coef >= 1:
+                    raise RuntimeError
+                for district in districts_labeled:
+                    district_coefs[district] *= adj_coef
+                for party in parties_labeled:
+                    party_coefs[party] /= adj_coef
+
+    def _apportion(self,
+                   votes: Dict[Constituency, Dict[Candidate, int]],
+                   n_seats: Union[int, Dict[Constituency, int]],
+                   ) -> Dict[Constituency, int]:
+        print(votes)
+        print(n_seats)
+        return util.apportion(
+            convert.ConstituencyTotals().convert(votes),
+            n_seats,
+            self.apportioner if self.apportioner is not None else self._eval,
+        )
+
+    def _augment_result(self,
+                        result: Dict[Constituency, Dict[Candidate, int]],
+                        districts_labeled: Dict[Constituency, Set[Candidate]],
+                        parties_labeled: Dict[Candidate, Set[Constituency]],
+                        start_district: Constituency,
+                        districts_over: List[Constituency],
+                        ) -> None:
+        aug_path = [start_district]
+        cur_source = districts_labeled
+        while aug_path[-1] not in districts_over:
+            aug_path.append(cur_source[aug_path[-1]].pop())
+            if cur_source is parties_labeled:
+                cur_source = districts_labeled
+            else:
+                cur_source = parties_labeled
+        for i, ctup in enumerate(zip(aug_path[:-1], aug_path[1:])):
+            if i % 2:
+                party, district = ctup
+                result[district][party] -= 1
+                if not result[district][party]:
+                    del result[district][party]
+            else:
+                district, party = ctup
+                if party not in result[district]:
+                    result[district][party] = 0
+                result[district][party] += 1
+
+    def _adj_coef(self,
+                  quotients: Dict[Constituency, Dict[Candidate, Fraction]],
+                  result: Dict[Constituency, Dict[Candidate, int]],
+                  districts_labeled: Collection[Constituency],
+                  parties_labeled: Collection[Candidate],
+                  ) -> Fraction:
+        alpha = 0
+        beta = INF
+        for district, d_quots in quotients.items():
+            d_is_labeled = district in districts_labeled
+            if parties_labeled or d_is_labeled:
+                for party, pd_quot in d_quots.items():
+                    if d_is_labeled != (party in parties_labeled):
+                        pd_seats = result[district].get(party, 0)
+                        pd_signpost = pd_seats - self.signpost_q
+                        is_alpha_scalable = (
+                            d_is_labeled
+                            and party not in parties_labeled
+                            and pd_signpost > 0
+                        )
+                        if is_alpha_scalable:
+                            pd_alpha = pd_signpost / pd_quot
+                            if pd_alpha > alpha:
+                                alpha = pd_alpha
+                        is_beta_scalable = (
+                            not d_is_labeled
+                            and party in parties_labeled
+                            and pd_quot > 0
+                        )
+                        if is_beta_scalable:
+                            pd_beta = (pd_signpost + 1) / pd_quot
+                            if pd_beta < beta:
+                                beta = pd_beta
+        return alpha if (alpha >= 1 / beta) else (1 / beta)
+
+    def _labeled(self,
+                 quotients: Dict[Constituency, Dict[Candidate, Fraction]],
+                 result: Dict[Constituency, Dict[Candidate, int]],
+                 districts_under: List[Constituency],
+                 districts_over: List[Constituency],
+                 ) -> Tuple[
+                     Dict[Constituency, Set[Candidate]],
+                     Dict[Candidate, Set[Constituency]]
+                 ]:
+        all_parties = list(sorted(frozenset(
+            p for dqs in quotients.values() for p in dqs.keys()
+        )))
+        labeled_districts = collections.defaultdict(
+            set, {d: set() for d in districts_over}
+        )
+        labeled_parties = collections.defaultdict(set)
+        prev_n_labelings = -1
+        n_labelings = 0
+        while prev_n_labelings < n_labelings:
+            prev_n_labelings = n_labelings
+            for d in labeled_districts:
+                for party in all_parties:
+                    if party not in labeled_parties:
+                        is_downgradable = self._is_downgradable(
+                            quotients[d][party],
+                            result[d].get(party, 0)
+                        )
+                        if is_downgradable:
+                            labeled_parties[party].add(d)
+                            n_labelings += 1
+            for party in labeled_parties:
+                for d in quotients.keys():
+                    if d not in labeled_districts:
+                        is_upgradable = self._is_upgradable(
+                            quotients[d][party],
+                            result[d].get(party, 0)
+                        )
+                        if is_upgradable:
+                            labeled_districts[d].add(party)
+                            n_labelings += 1
+            if any(d in districts_under for d in labeled_districts):
+                break
+        return labeled_districts, labeled_parties
+
+    def _is_upgradable(self, quotient: Fraction, n_seats: int) -> bool:
+        return (
+            int(quotient) == quotient - self.signpost_q
+            and n_seats + 1 - self.signpost_q == quotient
+        )
+
+    def _is_downgradable(self, quotient: Fraction, n_seats: int) -> bool:
+        return (
+            int(quotient) == quotient - self.signpost_q
+            and n_seats - self.signpost_q == quotient
+            and n_seats >= 1
+        )
+
+    def _calc_quots(self,
+                    votes: Dict[Constituency, Dict[Candidate, int]],
+                    seats: Dict[Constituency, Dict[Candidate, int]],
+                    district_coefs: Dict[Constituency, int],
+                    party_coefs: Dict[Constituency, int],
+                    ) -> Dict[Constituency, Dict[Candidate, Fraction]]:
+        return {
+            district: {
+                party: n_votes * district_coefs[district] * party_coefs[party]
+                for party, n_votes in district_votes.items()
             }
-            print(cand_mult)
-            # party-wise distribution: make sure each party has its rightful
-            # amount of seats and distribute them among districts accordingly
-            dist_seats = {}
-            for cand, n_seats in cand_alloc.items():
-                cvotes = {
-                    district: (
-                        votes[district].get(cand, 0)
-                        * district_mult[district]
-                        * cand_mult[cand]
+            for district, district_votes in votes.items()
+        }
+
+    def _districts_unsat(self,
+                         cur_district_seats: Dict[Constituency, int],
+                         tgt_district_seats: Dict[Constituency, int],
+                         ) -> Tuple[List[Constituency], List[Constituency]]:
+        all_districts = (
+            frozenset(cur_district_seats)
+            | frozenset(tgt_district_seats)
+        )
+        under, over = [], []
+        for d in all_districts:
+            cur_d_seats = cur_district_seats.get(d, 0)
+            tgt_d_seats = tgt_district_seats.get(d, 0)
+            if cur_d_seats != tgt_d_seats:
+                (under if cur_d_seats < tgt_d_seats else over).append(d)
+        return under, over
+
+    def _initial_solution(self,
+                          votes: Dict[Constituency, Dict[Candidate, int]],
+                          n_seats: Union[int, Dict[Constituency, int]],
+                          ) -> Dict[Constituency, Dict[Candidate, int]]:
+        # First, allocate the total seats to parties.
+        party_seats = self._eval.evaluate(
+            convert.VoteTotals().convert(votes),
+            n_seats if isinstance(n_seats, int) else sum(n_seats.values())
+        )
+        # Compute initial assignment through evaluation by party (columnwise).
+        solution = {d: {} for d in votes.keys()}
+        for party, n_party_seats in party_seats.items():
+            party_result = self._eval.evaluate(
+                {district: votes[district].get(party, 0)
+                 for district in votes},
+                n_party_seats
+            )
+            for district, n_district_party_seats in party_result.items():
+                if isinstance(district, core.Tie):
+                    # Tie on evaluation start, select an arbitrary district
+                    # of the tied.
+                    sel_district = list(sorted(district))[0]
+                    solution[sel_district].setdefault(party, 0)
+                    solution[sel_district][party] += n_district_party_seats
+                else:
+                    solution[district][party] = n_district_party_seats
+        return solution
+
+    def _initial_party_coefs(self,
+                             votes: Dict[Constituency, Dict[Candidate, int]],
+                             seats: Dict[Constituency, Dict[Candidate, int]],
+                             ) -> Dict[Candidate, Fraction]:
+        party_coefs = {}
+        for party in convert.VoteTotals().convert(votes).keys():
+            lowcoef = 0
+            highcoef = INF
+            for district, district_votes in votes.items():
+                party_district_n_votes = district_votes.get(party, 0)
+                if party_district_n_votes:
+                    party_district_n_seats = seats[district].get(party, 0)
+                    party_district_lowcoef = Fraction(
+                        party_district_n_seats - self.signpost_q,
+                        party_district_n_votes
                     )
-                    for district in district_alloc.keys()
-                }
-                cand_eval = self.district_eval.evaluate(cvotes, n_seats)
-                util.add_dict_to_dict(dist_seats, cand_eval)
-            print(dist_seats)
-            # adjust district vote multipliers
-            district_mult = {
-                district: district_alloc[district] / dseats
-                for district, dseats in dist_seats.items()
-            }
-            print(district_mult)
-            print()
-            if i > 10:
-                raise RuntimeError
-            i += 1
-'''
+                    if party_district_lowcoef > lowcoef:
+                        lowcoef = party_district_lowcoef
+                    party_district_highcoef = Fraction(
+                        party_district_n_seats + 1 - self.signpost_q,
+                        party_district_n_votes
+                    )
+                    if party_district_highcoef < highcoef:
+                        highcoef = party_district_highcoef
+            party_coefs[party] = Fraction(lowcoef + highcoef, 2)
+        return party_coefs

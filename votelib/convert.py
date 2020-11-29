@@ -805,8 +805,12 @@ class SubsettedVotes:
         (key) into a vote object that only concerns the specified candidates,
         with other candidates removed.
     '''
-    def __init__(self, vote_subsetter: vote.VoteSubsetter):
+    def __init__(self,
+                 vote_subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
+                 depth: int = 0,
+                 ):
         self.vote_subsetter = vote_subsetter
+        self.depth = depth
 
     def convert(self,
                 votes: Dict[Any, Number],
@@ -819,9 +823,22 @@ class SubsettedVotes:
         :param subset: The only candidates that should be contained in the
             output.
         '''
-        sub = collections.defaultdict(int)
-        for full_vote, n_votes in votes.items():
-            sub_vote = self.vote_subsetter.subset(full_vote, subset)
-            if sub_vote is not None:
-                sub[sub_vote] += n_votes
-        return dict(sub)
+        return self._convert(votes, subset, depth=self.depth)
+
+    def _convert(self,
+                 votes: Dict[Any, Number],
+                 subset: Collection[Candidate],
+                 depth: int,
+                 ) -> Dict[Any, Number]:
+        if depth == 0:
+            sub = collections.defaultdict(int)
+            for full_vote, n_votes in votes.items():
+                sub_vote = self.vote_subsetter.subset(full_vote, subset)
+                if sub_vote is not None:
+                    sub[sub_vote] += n_votes
+            return dict(sub)
+        else:
+            return {
+                nester: self._convert(nested, subset, depth - 1)
+                for nester, nested in votes.items()
+            }

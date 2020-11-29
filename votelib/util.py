@@ -13,7 +13,7 @@ from typing import Any, List, Tuple, Dict, FrozenSet, Union
 from numbers import Number
 
 from .vote import RankedVoteType
-from .candidate import Candidate
+from .candidate import Candidate, Constituency
 
 
 def add_dict_to_dict(dict1: Dict[Any, Number],
@@ -102,6 +102,37 @@ def _select_n_random_int(candidates: List[Any],
             + [wt - subtract_wt for wt in cum_weights[new_cand_i:]]
         )
     return chosen
+
+
+def apportion(votes: Dict[Constituency, int],
+              n_seats: Union[int, Dict[Constituency, int]],
+              apportioner: Union[
+                  'Distributor', Dict[Constituency, int], int, None
+              ] = None,
+              ) -> Dict[Constituency, int]:
+    if isinstance(apportioner, int):
+        # fixed seats for each constituency
+        return {c: apportioner for c in votes.keys()}
+    elif hasattr(apportioner, 'items'):
+        # seats per district are pre-determined statically
+        return apportioner
+    elif hasattr(n_seats, 'items'):
+        # seats per district are determined dynamically outside this
+        return n_seats
+    elif apportioner:
+        if isinstance(n_seats, Number):
+            # apportion seats across districts by number of votes cast
+            return apportioner.evaluate(votes, n_seats)
+        elif n_seats is None:
+            # apportionment without fixed total
+            return apportioner.evaluate(votes)
+        else:
+            raise ValueError('unknown apportionment scheme')
+    elif isinstance(n_seats, int):
+        # delegate to subevaluator
+        return {c: n_seats for c in votes.keys()}
+    else:
+        raise ValueError('invalid apportionment setup')
 
 
 def _select_n_random_float(candidates: List[Any],
