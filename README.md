@@ -64,6 +64,8 @@ used around the world, such as the following:
         Imperiali and their variants)
     -   Highest averages (all divisor variants - D'Hondt, Sainte-Laguë/Webster,
         Imperiali, Huntington-Hill, Macau)
+    -   Biproportional apportionment, allowing to satisfy proportionality in
+        both party and district seats
 
 The following classes of votes are supported:
 -   Simple (single candidate) voting
@@ -125,11 +127,10 @@ documentation. Tests can be run using simple
 ### Intended development directions
 (See [issues](https://github.com/simberaj/votelib/issues) for more.)
 
--   More extensive example and test coverage, documentation
--   Support more systems (such as biproportional voting, more STV
-    variants, Quota Borda)
--   Add evaluation metrics (e.g. to measure proportionality of an election
-    result)
+-   More extensive example and test coverage, documentation with literature
+    references
+-   Support more systems (such as more STV variants, Quota Borda, or more
+    Condorcet methods)
 
 ## License and author info
 Votelib is developed by Jan Šimbera <simbera.jan@gmail.com>.
