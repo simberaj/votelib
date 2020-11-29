@@ -87,7 +87,6 @@ def test_invalid_elim():
     votes = dict(zip(vote_list, range(3, len(vote_list)+3)))
     filtered = votelib.convert.InvalidVoteEliminator(validator).convert(votes)
     for vote, is_valid in zip(vote_list, is_valid):
-        print(vote, is_valid)
         assert (vote in filtered) == is_valid
 
 

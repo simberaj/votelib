@@ -392,6 +392,47 @@ class HighestAverages:
 
 @simple_serialization
 class BiproportionalEvaluator:
+    '''Allocate seats biproportionally to parties and constituencies.
+
+    Biproportional apportionment is a method to provide proportional election
+    results in two dimensions - constituencies and parties (candidates).
+    It works by computing the proportional result using a highest averages
+    method along one dimension (here: parties) and then iteratively updating it
+    until proportionality is also reached for constituencies, in a process that
+    somehow resembles iterative proportional fitting (IPF) but for integer
+    values.
+
+    There are two main biproportional apportionment algorithms - alternate
+    scaling (AS), which is known to be faster in initial stages but also to
+    stall in some corner cases, and tie-and-transfer (TT), which is slower but
+    robust. Here, tie-and-transfer (TT) is implemented as described in [#puk]_.
+
+    So far, the only studied variant of biproportional apportionment uses
+    highest averages methods, but usually in an alternative specification by
+    rounding rules (also called signpost sequences). These rounding rules have
+    only been found for D'Hondt and Sainte-Laguë divisors; for other divisors,
+    the implementation is missing yet.
+
+    :param divisor_function: A callable producing the divisor from the number
+        of seats awarded to the contestant so far, in the same form accepted
+        by :class:`HighestAverages`.
+    :param apportioner: An optional distribution evaluator to allocate seats to
+        constituencies according to the total numbers of votes cast in each.
+        Can also be an integer stating the uniformly valid number of seats for
+        each constituency, or a dictionary giving the numbers per constituency.
+        If None, the number of seats must be specified to :meth:`evaluate`,
+        or the highest averages evaluator defined by *divisor_function* is
+        used.
+    :param signpost_q: The signpost function subtraction constant, which
+        defines the rounding. For D'Hondt and Sainte-Laguë divisors, this is
+        automatically determined; for other divisors, it must be specified
+        manually.
+
+    .. [#puk] "Chapter 15. Double-Proportional Divisor Methods:
+        Technicalities", F. Pukelsheim. In: *Proportional Representation*,
+        DOI ``10.1007/978-3-319-64707-4_15``.
+    '''
+
     SIGNPOST_QS: Dict[str, Union[int, Fraction]] = {
         'd_hondt': 0,
         'sainte_lague': Fraction(1, 2),
@@ -416,6 +457,7 @@ class BiproportionalEvaluator:
     def _extract_signpost_q(self,
                             fx: Callable[[int], Number],
                             ) -> Union[int, Fraction]:
+        '''Determine the signpost subtraction constant from the divisor.'''
         value = self.SIGNPOST_QS.get(fx.__name__, NotImplemented)
         if value is NotImplemented:
             raise NotImplementedError(
@@ -427,36 +469,58 @@ class BiproportionalEvaluator:
                  votes: Dict[Constituency, Dict[Candidate, int]],
                  n_seats: Union[int, Dict[Constituency, int]],
                  ) -> Dict[Constituency, Dict[Candidate, int]]:
+        '''Distribute seats biproportionally.
+
+        :param votes: Simple votes per constituency to be evaluated.
+        :param n_seats: Number of seats to be filled, either in total or by
+            constituency.
+        '''
+        # Initial result, proportional by parties only.
+        # All subsequent modifications preserve this proportionality.
         result = self._initial_solution(votes, n_seats)
         tgt_district_seats = util.apportion(
             votes, n_seats,
             self.apportioner if self.apportioner is not None else self._eval,
         )
+        # Initial coefficients (inverse divisors) for parties and districts.
+        # These are modified by the tie-and-transfer algorithm.
         district_coefs = {d: 1 for d in votes}
+        # Party coefficients are computed to be consistent with the initial
+        # party-proportional seat allocation result.
         party_coefs = self._initial_party_coefs(votes, result)
+        # Iterate the tie-and-transfer algorithm.
         while True:
             cur_district_seats = convert.ConstituencyTotals().convert(result)
+            # Get districts that have less or more seats than needed.
             districts_under, districts_over = self._districts_unsat(
                 cur_district_seats,
                 tgt_district_seats,
             )
             if not (districts_under or districts_over):
+                # Biproportionality achieved, terminate.
                 return result
-            quotients = self._calc_quots(
-                votes, result, district_coefs, party_coefs
-            )
+            quotients = self._calc_quots(votes, district_coefs, party_coefs)
+            # Attempt to find a seat transfer path from a district with higher
+            # than proportional seat count to a district with lower than
+            # proportional count along cells with tied results while keeping
+            # party totals.
             districts_labeled, parties_labeled = self._labeled(
                 quotients, result, districts_under, districts_over
             )
+            # If any undervalued district was reached by the path,
             districts_under_labeled = list(sorted(
                 d for d in districts_under if d in districts_labeled
             ))
             if districts_under_labeled:
+                # transfer the seat along that path.
                 self._augment_result(
                     result, districts_labeled, parties_labeled,
                     districts_under_labeled[0], districts_over
                 )
             else:
+                # Otherwise, adjust some district and party coefficients
+                # so that more ties are created along which the seats can be
+                # transferred.
                 adj_coef = self._adj_coef(
                     quotients,
                     result,
@@ -464,7 +528,9 @@ class BiproportionalEvaluator:
                     parties_labeled.keys()
                 )
                 if adj_coef == 0 or adj_coef >= 1:
-                    raise RuntimeError
+                    raise core.VotingSystemError(
+                        f'invalid adjustment coefficient {adj_coef}'
+                    )
                 for district in districts_labeled:
                     district_coefs[district] *= adj_coef
                 for party in parties_labeled:
@@ -477,6 +543,14 @@ class BiproportionalEvaluator:
                         start_district: Constituency,
                         districts_over: List[Constituency],
                         ) -> None:
+        '''Transfer a seat to increase proportionality in result.
+
+        Move one allocated seat to *start_district* along a path determined
+        by alternating values in *districts_labeled* and *parties_labeled*
+        through alternated additions and subtractions until a seat is
+        subtracted from one of *districts_over*, which lowers the flaw count
+        (disproportionality) by two seats.
+        '''
         aug_path = [start_district]
         cur_source = districts_labeled
         while aug_path[-1] not in districts_over:
@@ -503,6 +577,12 @@ class BiproportionalEvaluator:
                   districts_labeled: Collection[Constituency],
                   parties_labeled: Collection[Candidate],
                   ) -> Fraction:
+        '''Determine the adjustment coefficient that will create more ties.
+
+        Seats can only be transferred along cells (district-party combinations)
+        with a tied result. We aim to find a coefficient to multiply the cell
+        quotient values in some columns or rows so that more ties are created.
+        '''
         alpha = 0
         beta = INF
         for district, d_quots in quotients.items():
@@ -541,15 +621,18 @@ class BiproportionalEvaluator:
                      Dict[Constituency, Set[Candidate]],
                      Dict[Candidate, Set[Constituency]]
                  ]:
+        '''Attempt to find a seat transfer path along tied cells.'''
         all_parties = list(sorted(frozenset(
             p for dqs in quotients.values() for p in dqs.keys()
         )))
+        # Start with all districts with higher values than needed.
         labeled_districts = collections.defaultdict(
             set, {d: set() for d in districts_over}
         )
         labeled_parties = collections.defaultdict(set)
         prev_n_labelings = -1
         n_labelings = 0
+        # Repeat expanding the paths until a step produces no more labels.
         while prev_n_labelings < n_labelings:
             prev_n_labelings = n_labelings
             for d in labeled_districts:
@@ -572,17 +655,21 @@ class BiproportionalEvaluator:
                         if is_upgradable:
                             labeled_districts[d].add(party)
                             n_labelings += 1
+            # If any district with lower value than needed was reached, the
+            # path is complete.
             if any(d in districts_under for d in labeled_districts):
                 break
         return labeled_districts, labeled_parties
 
     def _is_upgradable(self, quotient: Fraction, n_seats: int) -> bool:
+        '''Check if the cell contains a tie and a seat can be added.'''
         return (
             int(quotient) == quotient - self.signpost_q
             and n_seats + 1 - self.signpost_q == quotient
         )
 
     def _is_downgradable(self, quotient: Fraction, n_seats: int) -> bool:
+        '''Check if the cell contains a tie and a seat can be subtracted.'''
         return (
             int(quotient) == quotient - self.signpost_q
             and n_seats - self.signpost_q == quotient
@@ -591,10 +678,12 @@ class BiproportionalEvaluator:
 
     def _calc_quots(self,
                     votes: Dict[Constituency, Dict[Candidate, int]],
-                    seats: Dict[Constituency, Dict[Candidate, int]],
                     district_coefs: Dict[Constituency, int],
                     party_coefs: Dict[Constituency, int],
                     ) -> Dict[Constituency, Dict[Candidate, Fraction]]:
+        '''Calculate fractional seat count apporximators from vote counts
+        and coefficients (inverse divisors) in both dimensions.
+        '''
         return {
             district: {
                 party: n_votes * district_coefs[district] * party_coefs[party]
@@ -607,6 +696,10 @@ class BiproportionalEvaluator:
                          cur_district_seats: Dict[Constituency, int],
                          tgt_district_seats: Dict[Constituency, int],
                          ) -> Tuple[List[Constituency], List[Constituency]]:
+        '''Return districts with less and more seats than needed, respectively.
+
+        If both are empty, proportionality is achieved.
+        '''
         all_districts = (
             frozenset(cur_district_seats)
             | frozenset(tgt_district_seats)
@@ -623,12 +716,14 @@ class BiproportionalEvaluator:
                           votes: Dict[Constituency, Dict[Candidate, int]],
                           n_seats: Union[int, Dict[Constituency, int]],
                           ) -> Dict[Constituency, Dict[Candidate, int]]:
+        '''Allocate seats proportionally along the party dimension.'''
         # First, allocate the total seats to parties.
         party_seats = self._eval.evaluate(
             convert.VoteTotals().convert(votes),
             n_seats if isinstance(n_seats, int) else sum(n_seats.values())
         )
-        # Compute initial assignment through evaluation by party (columnwise).
+        # Compute initial assignment through evaluation by party (columnwise)
+        # to districts.
         solution = {d: {} for d in votes.keys()}
         for party, n_party_seats in party_seats.items():
             party_result = self._eval.evaluate(
@@ -651,6 +746,15 @@ class BiproportionalEvaluator:
                              votes: Dict[Constituency, Dict[Candidate, int]],
                              seats: Dict[Constituency, Dict[Candidate, int]],
                              ) -> Dict[Candidate, Fraction]:
+        '''Determine initial party coefficients from their votes and seats.
+
+        This is done to transpose the result obtained by conventional
+        uniproportional evaluation to the biproportional format that used
+        dimensional coefficients (inverse divisors). The initial form thus must
+        be consistent with the seat counts awarded to parties by the initial
+        evaluation. The coefficients will usually not differ much, only by the
+        degree by which the initial solution is disproportional to parties.
+        '''
         party_coefs = {}
         for party in convert.VoteTotals().convert(votes).keys():
             lowcoef = 0
