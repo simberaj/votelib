@@ -939,6 +939,8 @@ class ByParty:
 
 @simple_serialization
 class FixedSeatCount:
+    accepts_seats = False
+
     '''An evaluator wrapper that provides a fixed seat count.
 
     Useful when the seat count for a given system is predefined and constant.
@@ -1050,8 +1052,11 @@ class PartyListEvaluator:
 
 def accepts_seats(evaluator: Evaluator) -> bool:
     '''Whether evaluator takes seat count as an argument to evaluate().'''
-    params = inspect.signature(evaluator.evaluate).parameters
-    return 'n_seats' in params or _has_generic(params)
+    if hasattr(evaluator, 'accepts_seats'):
+        return evaluator.accepts_seats
+    else:
+        params = inspect.signature(evaluator.evaluate).parameters
+        return 'n_seats' in params or _has_generic(params)
 
 
 def accepts_prev_gains(evaluator: Evaluator) -> bool:

@@ -428,7 +428,10 @@ class BiproportionalEvaluator:
                  n_seats: Union[int, Dict[Constituency, int]],
                  ) -> Dict[Constituency, Dict[Candidate, int]]:
         result = self._initial_solution(votes, n_seats)
-        tgt_district_seats = self._apportion(votes, n_seats)
+        tgt_district_seats = util.apportion(
+            votes, n_seats,
+            self.apportioner if self.apportioner is not None else self._eval,
+        )
         district_coefs = {d: 1 for d in votes}
         party_coefs = self._initial_party_coefs(votes, result)
         while True:
@@ -466,18 +469,6 @@ class BiproportionalEvaluator:
                     district_coefs[district] *= adj_coef
                 for party in parties_labeled:
                     party_coefs[party] /= adj_coef
-
-    def _apportion(self,
-                   votes: Dict[Constituency, Dict[Candidate, int]],
-                   n_seats: Union[int, Dict[Constituency, int]],
-                   ) -> Dict[Constituency, int]:
-        print(votes)
-        print(n_seats)
-        return util.apportion(
-            convert.ConstituencyTotals().convert(votes),
-            n_seats,
-            self.apportioner if self.apportioner is not None else self._eval,
-        )
 
     def _augment_result(self,
                         result: Dict[Constituency, Dict[Candidate, int]],

@@ -112,7 +112,7 @@ def _select_n_random_int(candidates: List[Any],
     return chosen
 
 
-def apportion(votes: Dict[Constituency, int],
+def apportion(votes: Dict[Constituency, Dict[Candidate, Number]],
               n_seats: Union[int, Dict[Constituency, int]],
               apportioner: Union[
                   'Distributor', Dict[Constituency, int], int, None
@@ -128,12 +128,15 @@ def apportion(votes: Dict[Constituency, int],
         # seats per district are determined dynamically outside this
         return n_seats
     elif apportioner:
-        if isinstance(n_seats, Number):
+        constituency_votes = {
+            c: sum(c_votes.values()) for c, c_votes in votes.items()
+        }
+        if isinstance(n_seats, int):
             # apportion seats across districts by number of votes cast
-            return apportioner.evaluate(votes, n_seats)
+            return apportioner.evaluate(constituency_votes, n_seats)
         elif n_seats is None:
             # apportionment without fixed total
-            return apportioner.evaluate(votes)
+            return apportioner.evaluate(constituency_votes)
         else:
             raise ValueError('unknown apportionment scheme')
     elif isinstance(n_seats, int):
