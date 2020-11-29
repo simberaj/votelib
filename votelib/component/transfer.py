@@ -29,26 +29,26 @@ from ..persist import simple_serialization
 
 def ranked_next(vote: RankedVoteType,
                 cand: Candidate,
-                allowed: Collection[Candidate] = None,
+                not_allowed: Collection[Candidate] = None,
                 ) -> FrozenSet[Candidate]:
     '''Select the candidate(s) ranked in the vote after the given candidate.
 
     :param vote: The ranked vote to examine.
     :param cand: The candidate to look after.
-    :param allowed: If specified, only return candidate(s) if they are in this
-        collection, otherwise continue to lower ranks.
+    :param not_allowed: If specified, do not return candidate(s) from this
+        collection and skip them to lower ranks.
     :returns: Candidates ranked after cand. Will be empty if cand was ranked
         last or is not present in the vote. Will only have multiple members
         if the ranked vote contains a shared rank after cand.
     '''
     take_next = False
     for rank_alt in vote:
-        if isinstance(rank_alt, collections.abc.Set):
+        if isinstance(rank_alt, frozenset):
             if take_next:
-                if allowed is None:
+                if not_allowed is None:
                     return rank_alt
                 else:
-                    allowed_alt = rank_alt.intersection(allowed)
+                    allowed_alt = rank_alt.difference(not_allowed)
                     if allowed_alt:
                         return allowed_alt
                     # else go on for another rank
@@ -56,7 +56,7 @@ def ranked_next(vote: RankedVoteType,
                 take_next = True
         else:
             if take_next:
-                if rank_alt in allowed:
+                if rank_alt not in not_allowed:
                     return frozenset([rank_alt])
             elif cand == rank_alt:
                 take_next = True
@@ -110,58 +110,69 @@ def distribute_n_random(cand_weights: Dict[Any, Number],
 class VoteTransferer(metaclass=abc.ABCMeta):
     '''An abstract base class for vote transferers.
 
-    Vote transferers must provide a `transfer()` method that reallocates votes
-    from elected and/or eliminated candidates to those remaining in the
-    contest.
+    Vote transferers must provide a `subtract()` method that subtracts votes
+    from elected candidates and a `transfer()` method that redistributes
+    votes for some candidates to those remaining in the contest.
     '''
+    @abc.abstractmethod
+    def subtract(self,
+                 allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
+                 elected: Dict[Candidate, int],
+                 ) -> Dict[Candidate, Dict[RankedVoteType, Number]]:
+        '''Remove votes from elected candidates according to the quota.
+
+        :param allocation: Current allocation of ranked votes to candidates.
+            The votes allocated to elected candidates will be lowered by the
+            amount corresponding to the quota for their election.
+        :param elected: Elected candidates, mapped to the quota with which they
+            were elected (or multiples thereof, if they were awarded multiple
+            seats). These quotas should be removed from the candidates'
+            votes (because so many votes were used).
+        '''
+        raise NotImplementedError
+
     @abc.abstractmethod
     def transfer(self,
                  allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
-                 elected: Dict[Candidate, Number] = {},
-                 eliminated: List[Candidate] = [],
+                 candidates: List[Candidate],
                  ) -> Dict[Candidate, Dict[RankedVoteType, Number]]:
-        '''Transfer votes from elected and eliminated candidates.
+        '''Transfer votes from eliminated or fully elected candidates.
 
         :param allocation: Current allocation of ranked votes to candidates.
-            The votes allocated to elected and eliminated candidates must be
-            reallocated to other candidates.
-        :param elected: Elected candidates, mapped to the quota with which they
-            were elected. These quotas should be removed from the candidates'
-            votes (because so many votes were used) before they are transferred
+            The votes allocated to specified candidates will be reallocated
             to other candidates.
-        :param eliminated: Candidates eliminated from the contest without being
-            elected.
+        :param candidates: Candidates no longer continuing in the contest.
         '''
         raise NotImplementedError
 
 
 class SimpleVoteTransferer(VoteTransferer):
-    def transfer(self,
+    def subtract(self,
                  allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
-                 elected: Dict[Candidate, Number] = {},
-                 eliminated: List[Candidate] = [],
+                 elected: Dict[Candidate, int],
                  ) -> Dict[Candidate, Dict[RankedVoteType, Number]]:
-        '''Transfer votes from elected and eliminated candidates.
-
-        :param allocation: Current allocation of ranked votes to candidates.
-            The votes allocated to elected and eliminated candidates are
-            reallocated to other candidates.
-        :param elected: Elected candidates, mapped to the quota with which they
-            were elected. These quotas will be removed from the candidates'
-            votes (because this many votes were used). The remaining votes will
-            be transferred to next candidates on the ballots.
-        :param eliminated: Candidates eliminated from the contest without being
-            elected. Their votes will be transferred to next candidates on the
-            ballots.
-        '''
         allocation = {cand: alloc.copy() for cand, alloc in allocation.items()}
         if elected:
             for cand, quota in elected.items():
                 self._subtract(allocation[cand], quota)
-        to_retain, to_remove = self._select(allocation, elected, eliminated)
+        return allocation
+
+    def transfer(self,
+                 allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
+                 candidates: List[Candidate],
+                 ) -> Dict[Candidate, Dict[RankedVoteType, Number]]:
+        '''Transfer votes from eliminated or fully elected candidates.
+
+        :param allocation: Current allocation of ranked votes to candidates.
+            The votes allocated to specified candidates will be reallocated
+            to other candidates.
+        :param candidates: Candidates no longer continuing in the contest.
+        '''
+        allocation = {cand: alloc.copy() for cand, alloc in allocation.items()}
+        to_remove = [cand for cand in allocation if cand in candidates]
         for cand in to_remove:
             for vote, n_votes in allocation[cand].items():
-                targets = ranked_next(vote, cand, to_retain)
+                targets = ranked_next(vote, cand, to_remove)
                 if targets:
                     if len(targets) > 1:
                         realloc = self._distribute_equal_ranking(
@@ -177,17 +188,6 @@ class SimpleVoteTransferer(VoteTransferer):
                         target_alloc[vote] += n
             del allocation[cand]
         return allocation
-
-    @staticmethod
-    def _select(allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
-                elected: Dict[Candidate, Number] = {},
-                eliminated: List[Candidate] = [],
-                ) -> Tuple[List[Candidate], List[Candidate]]:
-        may_remove = list(elected.keys()) + eliminated
-        to_retain, to_remove = [], []
-        for cand in allocation:
-            (to_remove if cand in may_remove else to_retain).append(cand)
-        return to_retain, to_remove
 
     def _subtract(self,
                   cand_alloc: Dict[RankedVoteType, Number],
@@ -232,14 +232,18 @@ class Hare(SimpleVoteTransferer):
 
     def _subtract(self,
                   cand_alloc: Dict[RankedVoteType, Number],
-                  quota: int,
+                  n_sub: int,
                   ) -> None:
         random.seed(self.seed)
         subtractions = distribute_n_random(
-            cand_alloc, quota, limit_by_weight=True
+            cand_alloc, n_sub, limit_by_weight=True
         )
-        for vote, num in subtractions.items():
-            cand_alloc[vote] -= num
+        for vote, to_sub in subtractions.items():
+            to_sub_from = cand_alloc[vote]
+            if to_sub >= to_sub_from:
+                del cand_alloc[vote]
+            else:
+                cand_alloc[vote] -= to_sub
 
     def _distribute_equal_ranking(self,
                                   targets: FrozenSet[Candidate],
@@ -284,12 +288,19 @@ class Gregory(SimpleVoteTransferer):
     '''
     def _subtract(self,
                   cand_alloc: Dict[RankedVoteType, Fraction],
-                  quota: Fraction,
+                  n_sub: Fraction,
                   ) -> None:
         current_sum = sum(cand_alloc.values())
-        fraction = Fraction(current_sum - quota, current_sum)
-        for vote in cand_alloc.keys():
-            cand_alloc[vote] *= fraction
+        if current_sum == 0:
+            raise RuntimeError
+        if n_sub >= current_sum:
+            # We need to subtract more than there is, delete all votes.
+            for vote in list(cand_alloc.keys()):
+                del cand_alloc[vote]
+        else:
+            fraction = Fraction(current_sum - n_sub, current_sum)
+            for vote in cand_alloc.keys():
+                cand_alloc[vote] *= fraction
 
     def _distribute_equal_ranking(self,
                                   targets: FrozenSet[Candidate],

@@ -51,6 +51,14 @@ def all_ranked_candidates(votes: Dict[RankedVoteType, Any]
     return frozenset(all_candidates)
 
 
+def distribution_to_selection(d: Dict[Any, Number]) -> List[Any]:
+    return list([cand for cand, _ in sorted(
+        d.items(),
+        key=operator.itemgetter(1),
+        reverse=True    # rank in descending order of votes/scores/seats
+    )])
+
+
 def sorted_votes(votes: Dict[Any, Number],
                  descending: bool = True,
                  ) -> List[Tuple[Any, Number]]:
