@@ -9,10 +9,10 @@ from votelib.vote import RankedVoteType
 
 
 BLTSpecContents = Tuple[
-    Optional[str],
-    List[Candidate],
     Dict[Tuple[Candidate, ...], Number],    # ranked votes w/o shared ranks
-    int
+    int,
+    List[Candidate],
+    Optional[str],
 ]
 
 
@@ -22,6 +22,32 @@ def load(blt_file: TextIO, **kwargs) -> BLTSpecContents:
 
 def loads(blt_text: str, **kwargs) -> BLTSpecContents:
     return _load(iter(blt_text.split('\n')), **kwargs)
+
+
+def dump(votes: Dict[Tuple[Candidate, ...], Number],
+         n_seats: int,
+         candidates: Optional[List[Candidate]] = None,
+         election_name: Optional[str] = None,
+         blt_file: TextIO,
+         **kwargs) -> None:
+    for line in _dump(votes, n_seats, candidates, election_name):
+        blt_file.write(line + '\n')
+
+
+def dumps(votes: Dict[Tuple[Candidate, ...], Number],
+          n_seats: int,
+          candidates: Optional[List[Candidate]] = None,
+          election_name: Optional[str] = None,
+          **kwargs) -> None:
+    return '\n'.join(_dump(votes, n_seats, candidates, election_name))
+
+
+def _dump(votes: Dict[Tuple[Candidate, ...], Number],
+          n_seats: int,
+          candidates: Optional[List[Candidate]] = None,
+          election_name: Optional[str] = None,
+          ) -> None:
+    raise NotImplementedError
 
 
 def _load(blt_lines: Iterable[str],

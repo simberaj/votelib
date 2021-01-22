@@ -19,7 +19,7 @@ STV_EVAL = votelib.evaluate.sequential.TransferableVoteSelector()
 
 def test_maemo_blt():
     with open(os.path.join(DATA_DIR, 'maemo.blt'), encoding='utf8') as infile:
-        name, cands, votes, n_seats = votelib.io.blt.load(infile)
+        votes, n_seats, cands, name = votelib.io.blt.load(infile)
     assert name == 'Community Council Election Q1 2018'
     assert [cand.name for cand in cands] == [
         'mosen (Timo Könnecke)',
@@ -38,7 +38,7 @@ def test_maemo_blt():
 
 def test_rational_blt():
     with open(os.path.join(DATA_DIR, 'rational.blt'), encoding='utf8') as infile:
-        name, cands, votes, n_seats = votelib.io.blt.load(infile)
+        votes, n_seats, cands, name = votelib.io.blt.load(infile)
     assert name == 'RationalMedia Board 2020 Election'
     assert [cand.name for cand in cands] == [
         'Dysk',
@@ -58,7 +58,7 @@ def test_rational_blt():
 
 def test_atwood_so_blt():
     with open(os.path.join(DATA_DIR, 'atwood_so.blt'), encoding='utf8') as infile:
-        name, cands, votes, n_seats = votelib.io.blt.loads(infile.read())
+        votes, n_seats, cands, name = votelib.io.blt.loads(infile.read())
     assert name == 'Gardening Club Election'
     assert [cand.name for cand in cands] == ['Amy', 'Bob', 'Chuck', 'Diane']
     assert all(cand.withdrawn == (cand.name == 'Bob') for cand in cands)
@@ -77,7 +77,7 @@ def test_fail_empty():
 
 def test_maemo():
     with open(os.path.join(DATA_DIR, 'maemo.blt'), encoding='utf8') as infile:
-        name, cands, votes, n_seats = votelib.io.blt.load(infile)
+        votes, n_seats, cands, name = votelib.io.blt.load(infile)
     assert [cand.name for cand in STV_EVAL.evaluate(votes, n_seats)] == [
         'juiceme (Jussi Ohenoja)',
         'mosen (Timo Könnecke)',
@@ -87,7 +87,7 @@ def test_maemo():
 
 def test_rational():
     with open(os.path.join(DATA_DIR, 'rational.blt'), encoding='utf8') as infile:
-        name, cands, votes, n_seats = votelib.io.blt.load(infile)
+        votes, n_seats, cands, name = votelib.io.blt.load(infile)
     assert set(cand.name for cand in STV_EVAL.evaluate(votes, n_seats)) == {
         'LeftyGreenMario', 'Dysk', 'GrammarCommie', 'RoninMacbeth'
     }
