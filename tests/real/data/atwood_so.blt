@@ -1,0 +1,18 @@
+    4 2          # four candidates are competing for two seats
+    -2           # Bob has withdrawn (optional)
+    1 4 1 3 2 0  # first ballot
+    1 2 4 1 3 0
+    1 1 4 2 3 0  # The first number is the ballot weight (>= 1).
+    1 1 2 4 3 0  # The last 0 is an end of ballot marker.
+    1 1 4 3 0    # Numbers in between correspond to the candidates
+    1 3 2 4 1 0  # on the ballot.
+    1 3 4 1 2 0
+    1 3 4 1 2 0  # Chuck, Diane, Amy, Bob
+    1 4 3 2 0
+    1 2 3 4 1 0  # last ballot
+    0            # end of ballots marker
+    "Amy"        # candidate 1
+    "Bob"        # candidate 2
+    "Chuck"      # candidate 3
+    "Diane"      # candidate 4
+    "Gardening Club Election"  # title

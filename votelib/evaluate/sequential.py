@@ -8,6 +8,7 @@ import operator
 import sys
 import itertools
 import collections
+import logging
 from fractions import Fraction
 from typing import Any, List, Dict, Tuple, Union, Callable, Optional
 from numbers import Number
@@ -20,6 +21,8 @@ from . import core
 from .. import util, persist
 
 INF = float('inf')
+
+logger = logging.getLogger(__name__)
 
 
 @simple_serialization
@@ -145,18 +148,21 @@ class TransferableVoteDistributor:
             no seats were awarded on this count).
         '''
         n_rem_seats = n_seats - sum(prev_gains.values())
+        totals = {
+            cand: sum(cand_votes.values())
+            for cand, cand_votes in allocation.items()
+        }
         avail_seats = {
             cand: max_seats.get(cand, INF) - prev_gains.get(cand, 0)
-            for cand in allocation.keys()
+            for cand in sorted(allocation, key=totals.get, reverse=True)
         }
         if sum(avail_seats.values()) == n_rem_seats:
+            logger.info('electing all remaining: %s', avail_seats)
             return {}, avail_seats    # elect all remaining, no choice
         else:
-            totals = {
-                cand: sum(cand_votes.values())
-                for cand, cand_votes in allocation.items()
-            }
+            logger.info('current vote totals: %s', totals)
             quota_val = self._compute_quota(total_n_votes, n_seats)
+            logger.info('quota computed at %g', quota_val)
             quota_elected = self._elect_by_quota(
                 totals,
                 quota_val,
@@ -165,6 +171,7 @@ class TransferableVoteDistributor:
                 max_seats=max_seats
             )
             if quota_elected:
+                logger.info('%s elected by quota', quota_elected)
                 return self._transfer_elected(
                     allocation, quota_elected, quota_val, prev_gains, max_seats
                 ), quota_elected
@@ -175,6 +182,7 @@ class TransferableVoteDistributor:
                     cand for cand in totals.keys()
                     if cand not in retained
                 ]
+                logger.info('eliminating %s', eliminated)
                 return self.transferer.transfer(
                     allocation, eliminated
                 ), {}
@@ -208,6 +216,7 @@ class TransferableVoteDistributor:
                 break
             if new_allocation is not None:
                 allocation = new_allocation
+            logger.info('proceeding to count %d', count_i + 1)
             new_allocation, newly_elected = self.next_count(
                 allocation,
                 n_seats,
@@ -245,16 +254,16 @@ class TransferableVoteDistributor:
             allocation,
             {cand: n_seats * quota_val for cand, n_seats in elected.items()}
         )
-        exhausted = [
+        to_transfer_cands = [
             cand for cand, n_add_seats in elected.items()
             if (
                 n_add_seats + prev_gains.get(cand, 0)
                 == max_seats.get(cand, INF)
             )
         ]
-        if exhausted:
+        if to_transfer_cands:
             return self.transferer.transfer(
-                subtracted_alloc, exhausted
+                subtracted_alloc, to_transfer_cands
             )
         else:
             return subtracted_alloc
@@ -325,6 +334,8 @@ class TransferableVoteDistributor:
             cand: {} for cand in util.all_ranked_candidates(votes)
         }
         for vote, n_votes in votes.items():
+            if not vote:
+                continue    # for empty votes
             first_pref = vote[0]
             if isinstance(first_pref, collections.abc.Set):
                 # first rank is shared
