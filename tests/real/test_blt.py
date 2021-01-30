@@ -91,3 +91,21 @@ def test_rational():
     assert set(cand.name for cand in STV_EVAL.evaluate(votes, n_seats)) == {
         'LeftyGreenMario', 'Dysk', 'GrammarCommie', 'RoninMacbeth'
     }
+
+
+def test_gnome_26():
+    # https://vote.gnome.org/results.php?election_id=26
+    with open(os.path.join(DATA_DIR, 'gnome_26.blt'), encoding='utf8') as infile:
+        votes, n_seats, cands, name = votelib.io.blt.load(infile)
+    assert set(cand.name for cand in STV_EVAL.evaluate(votes, n_seats)) == {
+        'Allan Day', 'Carlos Soriano', 'Ekaterina Gerasimova',
+        'Federico Mena Quintero', 'Nuritzi Sanchez', 'Philip Chimento',
+        'Robert McQueen',
+    }
+
+
+def test_gnome_26_roundtrip():
+    with open(os.path.join(DATA_DIR, 'gnome_26.blt'), encoding='utf8') as infile:
+        blt_text = infile.read()
+    roundtripped = votelib.io.blt.dumps(*votelib.io.blt.loads(blt_text))
+    assert roundtripped.strip() == blt_text.strip()

@@ -15,6 +15,7 @@ DEFAULT_STV = votelib.evaluate.sequential.TransferableVoteSelector(
 )
 
 def test_food():
+    # from wikipedia (https://en.wikipedia.org/wiki/Single_transferable_vote)
     votes = {
         ('Orange',): 4,
         ('Pear', 'Orange'): 2,
@@ -35,7 +36,9 @@ def test_rv_stv():
         tuple('DCEF'): 20,
         tuple('CDB'): 19,
     }
-    assert DEFAULT_STV.evaluate(votes, 3) == ['D', 'B', 'F']
+    result = DEFAULT_STV.evaluate(votes, 3)
+    assert result[0] == 'D'
+    assert set(result) == {'D', 'B', 'F'}
 
 
 def test_rv_irv_nightmare_12():
@@ -182,7 +185,7 @@ def test_stv_scottish():
     assert first_count_elect == ['Campbell']
     second_count_res, second_count_elect = DEFAULT_STV.nth_count(SCOTTISH_VOTES, 3, 2)
     assert {
-        c: int(v) for c, v in second_count_res.items()
+        c: int(v) for c, v in second_count_res.items() if c is not None
     } == {
         'Adams': 686,
         'Baker': 462,
@@ -193,7 +196,7 @@ def test_stv_scottish():
     third_count_res, third_count_elect = DEFAULT_STV.nth_count(SCOTTISH_VOTES, 3, 3)
     assert third_count_elect == second_count_elect
     assert {
-        c: int(v) for c, v in third_count_res.items()
+        c: int(v) for c, v in third_count_res.items() if c is not None
     } == {
         'Baker': 467,
         'Gray': 251,
@@ -202,7 +205,7 @@ def test_stv_scottish():
     fourth_count_res, fourth_count_elect = DEFAULT_STV.nth_count(SCOTTISH_VOTES, 3, 4)
     assert fourth_count_elect == ['Campbell', 'Adams', 'Miller']
     assert {
-        c: int(v) for c, v in fourth_count_res.items()
+        c: int(v) for c, v in fourth_count_res.items() if c is not None
     } == {
         'Baker': 537,
         'Miller': 602,
@@ -215,7 +218,7 @@ def test_top2_irv():
         eliminate_step=2,
     )
     elim_votes, elim_elected = eval.nth_count(SCOTTISH_VOTES, 1, 2)
-    assert set(elim_votes.keys()) == {'Adams', 'Campbell'}
+    assert set(elim_votes.keys()) == {'Adams', 'Campbell', None}
     assert elim_elected == []
     assert eval.evaluate(SCOTTISH_VOTES, 1) == ['Campbell']
 

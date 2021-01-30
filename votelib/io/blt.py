@@ -26,9 +26,9 @@ def loads(blt_text: str, **kwargs) -> BLTSpecContents:
 
 def dump(votes: Dict[Tuple[Candidate, ...], Number],
          n_seats: int,
+         blt_file: TextIO,
          candidates: Optional[List[Candidate]] = None,
          election_name: Optional[str] = None,
-         blt_file: TextIO,
          **kwargs) -> None:
     for line in _dump(votes, n_seats, candidates, election_name):
         blt_file.write(line + '\n')
@@ -46,8 +46,47 @@ def _dump(votes: Dict[Tuple[Candidate, ...], Number],
           n_seats: int,
           candidates: Optional[List[Candidate]] = None,
           election_name: Optional[str] = None,
-          ) -> None:
-    raise NotImplementedError
+          ) -> Iterable[str]:
+    if candidates is None:
+        candidates = _gather_candidates(votes)
+    if election_name is None:
+        election_name = 'Unknown election'
+    yield _dump_numline([len(candidates), n_seats])
+    for i in _get_withdrawn_inds(candidates):
+        yield _dump_numline([-(i+i)])
+    for rvote, n_votes in votes.items():
+        yield _dump_numline(_dump_vote(rvote, candidates, n_votes))
+    yield _dump_numline([0])
+    for cand in candidates:
+        if not isinstance(cand, str):
+            if hasattr(cand, 'name'):
+                cand = cand.name
+            else:
+                cand = str(cand)
+        yield _dump_strline(cand)
+    yield _dump_strline(election_name)
+
+
+def _get_withdrawn_inds(candidates: List[Candidate]) -> List[int]:
+    return [
+        i for i, cand in enumerate(candidates)
+        if hasattr(cand, 'withdrawn') and cand.withdrawn
+    ]
+
+
+def _dump_vote(vote: Tuple[Candidate, ...],
+               candidates: List[Candidate],
+               n_votes: Number,
+               ) -> List[Number]:
+    return [n_votes] + [candidates.index(cand) + 1 for cand in vote] + [0]
+
+
+def _dump_numline(nums: List[Number]) -> str:
+    return ' '.join(str(num) for num in nums)
+
+
+def _dump_strline(string: str) -> str:
+    return f'"{string}"'
 
 
 def _load(blt_lines: Iterable[str],
@@ -67,10 +106,10 @@ def _load(blt_lines: Iterable[str],
     candidates = _form_candidate_objects(candidates, withdrawn)
     true_ballots = _deindex_ballots(ballots, candidates)
     return (
-        election_name,
-        candidates,
         true_ballots,
-        n_seats
+        n_seats,
+        candidates,
+        election_name,
     )
 
 
@@ -149,10 +188,15 @@ def _parse_body(blt_lines: Iterable[str],
 def _parse_strings(blt_lines: Iterable[str]
                    ) -> Tuple[Optional[List[str]], Optional[str]]:
     parsed_lines = []
+    empty_encountered = False
     for blt_line in blt_lines:
         blt_line = _clean_line(blt_line)
         if blt_line.startswith('"') and blt_line.endswith('"'):
+            if empty_encountered:
+                raise ValueError(f'nonempty line after empty: {blt_line!r}')
             parsed_lines.append(blt_line[1:-1])
+        elif not blt_line:
+            empty_encountered = True
         else:
             raise ValueError(f'invalid BLT string line: {blt_line!r}')
     if not parsed_lines:
