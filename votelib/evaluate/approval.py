@@ -209,6 +209,9 @@ class QuotaSelector:
         self.accept_equal = accept_equal
         self.on_more_over_quota = on_more_over_quota
 
+    def score(self, votes: Dict[Candidate, int]) -> Dict[Candidate, int]:
+        return votes
+
     def evaluate(self,
                  votes: Dict[Candidate, int],
                  n_seats: int = 1,
