@@ -27,36 +27,38 @@ from ..evaluate.proportional import LargestRemainder
 from ..persist import simple_serialization
 
 
+RankedVoteAllocation = Dict[Optional[Candidate], Dict[RankedVoteType, Number]]
+
+
 def ranked_next(vote: RankedVoteType,
                 cand: Candidate,
-                not_allowed: Collection[Candidate] = None,
+                allowed: Collection[Candidate],
                 ) -> FrozenSet[Candidate]:
     '''Select the candidate(s) ranked in the vote after the given candidate.
 
     :param vote: The ranked vote to examine.
     :param cand: The candidate to look after.
-    :param not_allowed: If specified, do not return candidate(s) from this
-        collection and skip them to lower ranks.
+    :param allowed: Only return candidate(s) from this collection, skip all
+        others to lower ranks.
     :returns: Candidates ranked after cand. Will be empty if cand was ranked
         last or is not present in the vote. Will only have multiple members
         if the ranked vote contains a shared rank after cand.
     '''
+    # Iterate through the vote until we find cand. At him, set take_next to
+    # True to return the candidates ranked next.
     take_next = False
     for rank_alt in vote:
         if isinstance(rank_alt, frozenset):
             if take_next:
-                if not_allowed is None:
-                    return rank_alt
-                else:
-                    allowed_alt = rank_alt.difference(not_allowed)
-                    if allowed_alt:
-                        return allowed_alt
-                    # else go on for another rank
+                allowed_alt = rank_alt.intersection(allowed)
+                if allowed_alt:
+                    return allowed_alt
+                # else go on for another rank
             elif cand in rank_alt:
                 take_next = True
         else:
             if take_next:
-                if rank_alt not in not_allowed:
+                if rank_alt in allowed:
                     return frozenset([rank_alt])
             elif cand == rank_alt:
                 take_next = True
@@ -116,9 +118,9 @@ class VoteTransferer(metaclass=abc.ABCMeta):
     '''
     @abc.abstractmethod
     def subtract(self,
-                 allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
+                 allocation: RankedVoteAllocation,
                  elected: Dict[Candidate, int],
-                 ) -> Dict[Candidate, Dict[RankedVoteType, Number]]:
+                 ) -> RankedVoteAllocation:
         '''Remove votes from elected candidates according to the quota.
 
         :param allocation: Current allocation of ranked votes to candidates.
@@ -133,9 +135,9 @@ class VoteTransferer(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def transfer(self,
-                 allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
+                 allocation: RankedVoteAllocation,
                  candidates: List[Candidate],
-                 ) -> Dict[Candidate, Dict[RankedVoteType, Number]]:
+                 ) -> RankedVoteAllocation:
         '''Transfer votes from eliminated or fully elected candidates.
 
         :param allocation: Current allocation of ranked votes to candidates.
@@ -148,9 +150,9 @@ class VoteTransferer(metaclass=abc.ABCMeta):
 
 class SimpleVoteTransferer(VoteTransferer):
     def subtract(self,
-                 allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
+                 allocation: RankedVoteAllocation,
                  elected: Dict[Candidate, int],
-                 ) -> Dict[Candidate, Dict[RankedVoteType, Number]]:
+                 ) -> RankedVoteAllocation:
         allocation = {cand: alloc.copy() for cand, alloc in allocation.items()}
         if elected:
             for cand, quota in elected.items():
@@ -158,21 +160,26 @@ class SimpleVoteTransferer(VoteTransferer):
         return allocation
 
     def transfer(self,
-                 allocation: Dict[Candidate, Dict[RankedVoteType, Number]],
+                 allocation: RankedVoteAllocation,
                  candidates: List[Candidate],
-                 ) -> Dict[Candidate, Dict[RankedVoteType, Number]]:
+                 ) -> RankedVoteAllocation:
         '''Transfer votes from eliminated or fully elected candidates.
 
         :param allocation: Current allocation of ranked votes to candidates.
             The votes allocated to specified candidates will be reallocated
-            to other candidates.
-        :param candidates: Candidates no longer continuing in the contest.
+            to other candidates that are present in the allocation, or
+            reassigned to the None key as exhausted ballots.
+        :param candidates: Candidates to be removed from the allocation.
         '''
         allocation = {cand: alloc.copy() for cand, alloc in allocation.items()}
         to_remove = [cand for cand in allocation if cand in candidates]
+        continuing = [
+            cand for cand in allocation
+            if cand is not None and cand not in candidates
+        ]
         for cand in to_remove:
             for vote, n_votes in allocation[cand].items():
-                targets = ranked_next(vote, cand, to_remove)
+                targets = ranked_next(vote, cand, continuing)
                 if targets:
                     if len(targets) > 1:
                         realloc = self._distribute_equal_ranking(
@@ -186,6 +193,13 @@ class SimpleVoteTransferer(VoteTransferer):
                         if vote not in target_alloc:
                             target_alloc[vote] = 0
                         target_alloc[vote] += n
+                else:
+                    # Put the ballots on the exhausted pile.
+                    if None not in allocation:
+                        allocation[None] = {}
+                    if vote not in allocation[None]:
+                        allocation[None][vote] = 0
+                    allocation[None][vote] += n_votes
             del allocation[cand]
         return allocation
 

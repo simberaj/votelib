@@ -61,6 +61,11 @@ class Candidate(metaclass=abc.ABCMeta):
     so if you want to use those system objects, using the subclasses is
     necessary.
     '''
+
+    withdrawn: bool = False
+    '''Whether the candidate withdrew from the election (and is thus ineligible
+    to get elected).'''
+
     @classmethod
     def __subclasshook__(cls, subcl):
         if cls is Candidate:
@@ -106,6 +111,8 @@ class Person(IndividualElectionOption):
     :param candidacy_for: A political party for which the person is standing
         in the election. If there is no such party, the person is considered
         an independent candidate.
+    :param withdrawn: Whether the candidate withdrew from the election
+        (and is thus ineligible to get elected).
     '''
     def __init__(self,
                  name: str,
@@ -113,18 +120,21 @@ class Person(IndividualElectionOption):
                  membership: Optional[PoliticalParty] = None,
                  candidacy_for: Optional[ElectionParty] = None,
                  properties: List[str] = [],
+                 withdrawn: bool = False,
                  ):
         self.name = name
         self.number = number
         self.membership = membership
         self.candidacy_for = candidacy_for
         self.properties = properties
+        self.withdrawn = withdrawn
 
     def __repr__(self) -> str:
         return (
-            '<Person({0.name},number={0.number},membership={0.membership},'
-            'candidacy_for={0.candidacy_for})>'
-        ).format(self)
+            f'<Person({self.name}'
+            + (f',{self.number}' if self.number is not None else '')
+            + ')>'
+        )
 
 
 class ElectionParty(Candidate):
@@ -157,12 +167,14 @@ class PoliticalParty(ElectionParty):
                  affiliations: Optional[List[PoliticalParty]] = None,
                  lead: Optional[Person] = None,
                  properties: List[str] = [],
+                 withdrawn: bool = False,
                  ):
         self.name = name
         self.number = number
         self.affiliations = affiliations
         self.lead = lead
         self.properties = properties
+        self.withdrawn = withdrawn
 
     def __repr__(self) -> str:
         return (
@@ -193,6 +205,7 @@ class Coalition(ElectionParty):
                  number: Optional[int] = None,
                  affiliations: Optional[List[PoliticalParty]] = None,
                  lead: Optional[Person] = None,
+                 withdrawn: bool = False,
                  ):
         self.parties = parties
         if name is None:
@@ -201,6 +214,7 @@ class Coalition(ElectionParty):
         self.number = number
         self.affiliations = affiliations
         self.lead = lead
+        self.withdrawn = withdrawn
 
     def get_n_coalition_members(self) -> int:
         '''Return the number of member parties in the coalition.
