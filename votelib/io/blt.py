@@ -5,7 +5,6 @@ from typing import List, Dict, Tuple, Set, Iterable, Optional, TextIO
 
 import votelib.candidate
 from votelib.candidate import Candidate
-from votelib.vote import RankedVoteType
 
 
 BLTSpecContents = Tuple[
