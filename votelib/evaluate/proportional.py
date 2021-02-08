@@ -17,12 +17,13 @@ from typing import (
 )
 from numbers import Number
 
-from .. import convert, util
-from ..candidate import Candidate, Constituency
-from ..component import quota, divisor
-from ..persist import simple_serialization
-from . import core
-
+import votelib.convert
+import votelib.util
+import votelib.component.divisor
+import votelib.component.quota
+import votelib.evaluate.core
+from votelib.candidate import Candidate, Constituency
+from votelib.persist import simple_serialization
 
 INF = float('inf')
 
@@ -172,7 +173,8 @@ class QuotaDistributor:
 
     :param quota_function: A callable producing the quota threshold from the
         total number of votes and number of seats. The common quota functions
-        can be referenced by string name from the :mod:`quota` module.
+        can be referenced by string name from the
+        :mod:`votelib.component.quota` module.
     :param accept_equal: Whether to consider the candidate elected when
         their votes exactly equal the quota.
     '''
@@ -182,7 +184,7 @@ class QuotaDistributor:
                  ] = 'droop',
                  accept_equal: bool = True,
                  ):
-        self.quota_function = quota.construct(quota_function)
+        self.quota_function = votelib.component.quota.construct(quota_function)
         self.accept_equal = accept_equal
 
     def evaluate(self,
@@ -231,7 +233,7 @@ class QuotaDistributor:
                 cand: selected.get(cand, 0) + prev_gains.get(cand, 0)
                 for cand in votes
             }
-            util.add_dict_to_dict(selected, self.evaluate(
+            votelib.util.add_dict_to_dict(selected, self.evaluate(
                 remaining_votes,
                 n_overshot,
                 prev_gains=total_gained,
@@ -258,12 +260,13 @@ class LargestRemainder:
 
     :param quota_function: A callable producing the quota threshold from the
         total number of votes and number of seats. The common quota functions
-        can be referenced by string name from the :mod:`quota` module.
+        can be referenced by string name from the
+        :mod:`votelib.component.quota` module.
     '''
     def __init__(self,
                  quota_function: Union[str, Callable[[int, int], Number]],
                  ):
-        self.quota_function = quota.construct(quota_function)
+        self.quota_function = votelib.component.quota.construct(quota_function)
         self._quota_evaluator = QuotaDistributor(self.quota_function)
 
     def evaluate(self,
@@ -289,14 +292,15 @@ class LargestRemainder:
         quota_number = self.quota_function(
             sum(votes.values()), n_seats
         )
-        gained_prerem = util.sum_dicts(quota_elected, prev_gains)
+        gained_prerem = votelib.util.sum_dicts(quota_elected, prev_gains)
         n_for_remainder = n_seats - sum(gained_prerem.values())
         remainders = {
             cand: Fraction(n_votes, quota_number) - gained_prerem.get(cand, 0)
             for cand, n_votes in votes.items()
             if gained_prerem.get(cand, 0) < max_seats.get(cand, INF)
         }
-        for candidate in core.get_n_best(remainders, n_for_remainder):
+        best = votelib.evaluate.core.get_n_best(remainders, n_for_remainder)
+        for candidate in best:
             if candidate in quota_elected:
                 quota_elected[candidate] += 1
             else:
@@ -322,15 +326,17 @@ class HighestAverages:
         of seats awarded to the contestant so far. For example, the D'Hondt
         divisor (which uses the natural numbers sequence) would always return
         the number of currently held seats raised by one. The common divisor
-        functions can be referenced by string name from the :mod:`divisor`
-        module.
+        functions can be referenced by string name from the
+        :mod:`votelib.component.divisor` module.
     '''
     def __init__(self,
                  divisor_function: Union[
                      str, Callable[[int], Number]
                  ] = 'd_hondt',
                  ):
-        self.divisor_function = divisor.construct(divisor_function)
+        self.divisor_function = votelib.component.divisor.construct(
+            divisor_function
+        )
 
     def evaluate(self,
                  votes: Dict[Candidate, int],
@@ -354,9 +360,11 @@ class HighestAverages:
             divisor = self.divisor_function(cand_total)
             if divisor > 0 and cand_total < max_seats.get(cand, n_seats):
                 quotient_dict[cand] = Fraction(n_votes, divisor)
-        candidates, quotients = [list(x) for x in zip(*util.sorted_votes(
-            quotient_dict, descending=False
-        ))]
+        candidates, quotients = [
+            list(x) for x in zip(*votelib.util.sorted_votes(
+                quotient_dict, descending=False
+            ))
+        ]
         rem_seats = n_seats - sum(totals.values())
         while rem_seats > 0 and quotients:
             n_elect = 1
@@ -365,7 +373,7 @@ class HighestAverages:
                 n_elect += 1
             to_elect = candidates[-n_elect:]
             if n_elect > rem_seats:
-                to_elect = [core.Tie(to_elect)] * rem_seats
+                to_elect = [votelib.evaluate.core.Tie(to_elect)] * rem_seats
             for cand in to_elect:
                 if cand in totals:
                     totals[cand] += 1
@@ -443,11 +451,16 @@ class BiproportionalEvaluator:
                      str, Callable[[int], Number]
                  ] = 'd_hondt',
                  apportioner: Union[
-                     core.Distributor, Dict[Constituency, int], int, None
+                     votelib.evaluate.core.Distributor,
+                     Dict[Constituency, int],
+                     int,
+                     None
                  ] = None,
                  signpost_q: Optional[Union[int, Fraction]] = None,
                  ):
-        self.divisor_function = divisor.construct(divisor_function)
+        self.divisor_function = votelib.component.divisor.construct(
+            divisor_function
+        )
         if signpost_q is None:
             signpost_q = self._extract_signpost_q(self.divisor_function)
         self.signpost_q = signpost_q
@@ -478,7 +491,7 @@ class BiproportionalEvaluator:
         # Initial result, proportional by parties only.
         # All subsequent modifications preserve this proportionality.
         result = self._initial_solution(votes, n_seats)
-        tgt_district_seats = core.apportion(
+        tgt_district_seats = votelib.evaluate.core.apportion(
             votes, n_seats,
             self.apportioner if self.apportioner is not None else self._eval,
         )
@@ -490,7 +503,9 @@ class BiproportionalEvaluator:
         party_coefs = self._initial_party_coefs(votes, result)
         # Iterate the tie-and-transfer algorithm.
         while True:
-            cur_district_seats = convert.ConstituencyTotals().convert(result)
+            cur_district_seats = votelib.convert.ConstituencyTotals().convert(
+                result
+            )
             # Get districts that have less or more seats than needed.
             districts_under, districts_over = self._districts_unsat(
                 cur_district_seats,
@@ -528,7 +543,7 @@ class BiproportionalEvaluator:
                     parties_labeled.keys()
                 )
                 if adj_coef == 0 or adj_coef >= 1:
-                    raise core.VotingSystemError(
+                    raise votelib.evaluate.core.VotingSystemError(
                         f'invalid adjustment coefficient {adj_coef}'
                     )
                 for district in districts_labeled:
@@ -719,7 +734,7 @@ class BiproportionalEvaluator:
         '''Allocate seats proportionally along the party dimension.'''
         # First, allocate the total seats to parties.
         party_seats = self._eval.evaluate(
-            convert.VoteTotals().convert(votes),
+            votelib.convert.VoteTotals().convert(votes),
             n_seats if isinstance(n_seats, int) else sum(n_seats.values())
         )
         # Compute initial assignment through evaluation by party (columnwise)
@@ -732,7 +747,7 @@ class BiproportionalEvaluator:
                 n_party_seats
             )
             for district, n_district_party_seats in party_result.items():
-                if isinstance(district, core.Tie):
+                if isinstance(district, votelib.evaluate.core.Tie):
                     # Tie on evaluation start, select an arbitrary district
                     # of the tied.
                     sel_district = list(sorted(district))[0]
@@ -756,7 +771,7 @@ class BiproportionalEvaluator:
         degree by which the initial solution is disproportional to parties.
         '''
         party_coefs = {}
-        for party in convert.VoteTotals().convert(votes).keys():
+        for party in votelib.convert.VoteTotals().convert(votes).keys():
             lowcoef = 0
             highcoef = INF
             for district, district_votes in votes.items():

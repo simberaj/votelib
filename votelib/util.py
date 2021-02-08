@@ -12,8 +12,8 @@ from fractions import Fraction
 from typing import Any, List, Tuple, Dict, FrozenSet, Union
 from numbers import Number
 
-from .vote import RankedVoteType
-from .candidate import Candidate
+from votelib.vote import RankedVoteType
+from votelib.candidate import Candidate
 
 
 def add_dict_to_dict(dict1: Dict[Any, Number],

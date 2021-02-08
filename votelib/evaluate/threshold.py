@@ -7,13 +7,14 @@ of them to select; that number is determined by other means.
 '''
 
 from fractions import Fraction
-from typing import Any, List, Dict, Union, Optional
+from typing import Any, List, Dict, Optional
 from numbers import Number
 
-from . import core
-from .. import util
-from ..candidate import Candidate, ElectionParty
-from ..persist import simple_serialization
+
+import votelib.util
+import votelib.evaluate.core
+from votelib.candidate import Candidate, ElectionParty
+from votelib.persist import simple_serialization
 
 
 @simple_serialization
@@ -43,7 +44,7 @@ class AbsoluteThreshold:
         :param votes: Simple votes.
         '''
         return [
-            cand for cand, n_votes in util.sorted_votes(votes)
+            cand for cand, n_votes in votelib.util.sorted_votes(votes)
             if (
                 n_votes > self.threshold
                 or self.accept_equal and n_votes == self.threshold
@@ -82,7 +83,7 @@ class RelativeThreshold:
         '''
         total = sum(votes.values())
         return [
-            cand for cand, n_votes in util.sorted_votes(votes)
+            cand for cand, n_votes in votelib.util.sorted_votes(votes)
             if (
                 Fraction(n_votes, total) > self.threshold
                 or self.accept_equal and n_votes == self.threshold
@@ -107,8 +108,8 @@ class CoalitionMemberBracketer:
         "four and more party coalitions".
     '''
     def __init__(self,
-                 evaluators: Dict[int, core.SeatlessSelector],
-                 default: core.SeatlessSelector,
+                 evaluators: Dict[int, votelib.evaluate.core.SeatlessSelector],
+                 default: votelib.evaluate.core.SeatlessSelector,
                  ):
         self.evaluators = evaluators
         self.default = default
@@ -125,7 +126,7 @@ class CoalitionMemberBracketer:
         '''
         n_member_dict = {
             cand: cand.get_n_coalition_members() if cand.is_coalition else 1
-            for cand, _ in util.sorted_votes(votes)
+            for cand, _ in votelib.util.sorted_votes(votes)
         }
         n_member_variants = frozenset(n_member_dict.values())
         passed = {
@@ -161,8 +162,12 @@ class PropertyBracketer:
     '''
     def __init__(self,
                  property: str,
-                 evaluators: Dict[Any, Union[core.SeatlessSelector, None]],
-                 default: Optional[core.SeatlessSelector] = None,
+                 evaluators: Dict[
+                     Any, Optional[votelib.evaluate.core.SeatlessSelector]
+                 ],
+                 default: Optional[
+                     votelib.evaluate.core.SeatlessSelector
+                 ] = None,
                  ):
         self.property = property
         self.evaluators = evaluators
@@ -179,7 +184,7 @@ class PropertyBracketer:
         '''
         variants = {}
         results = []
-        for cand, _ in util.sorted_votes(votes):
+        for cand, _ in votelib.util.sorted_votes(votes):
             cand_var = getattr(cand, self.property, NotImplemented)
             if cand_var not in variants:
                 var_eval = self.evaluators.get(
@@ -205,10 +210,10 @@ class AlternativeThresholds:
     '''
     # an OR function for eliminators, primarily
     def __init__(self,
-                 partials: List[core.SeatlessSelector],
+                 partials: List[votelib.evaluate.core.SeatlessSelector],
                  ):
         for partial in partials:
-            if core.accepts_seats(partial):
+            if votelib.evaluate.core.accepts_seats(partial):
                 raise ValueError(f'seat-based evaluator {partial} in {self}')
         self.partials = partials
 
@@ -225,7 +230,7 @@ class AlternativeThresholds:
         '''
         partial_results = []
         for partial in self.partials:
-            if core.accepts_prev_gains(partial):
+            if votelib.evaluate.core.accepts_prev_gains(partial):
                 partial_result = partial.evaluate(votes, prev_gains=prev_gains)
             else:
                 partial_result = partial.evaluate(votes)
@@ -263,7 +268,7 @@ class PreviousGainThreshold:
     :param selector: The selector to evaluate the threshold on previous gains;
         :class:`AbsoluteThreshold` would be the most typical choice.
     '''
-    def __init__(self, selector: core.SeatlessSelector):
+    def __init__(self, selector: votelib.evaluate.core.SeatlessSelector):
         self.selector = selector
 
     def evaluate(self,

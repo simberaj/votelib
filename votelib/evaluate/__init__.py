@@ -30,4 +30,4 @@ None of the evaluators validate vote correctness; use the tools in the
     https://rangevoting.org/Asset.html
 '''
 
-from .core import *    # noqa
+from votelib.evaluate.core import *    # noqa

@@ -10,7 +10,7 @@ from fractions import Fraction
 from typing import List, Any
 from numbers import Number
 
-from ..persist import simple_serialization
+from votelib.persist import simple_serialization
 
 
 def select_padded(sequence: List[Any], n: int, pad_with: Any = 0) -> List[Any]:

@@ -21,10 +21,10 @@ from fractions import Fraction
 from typing import Any, List, Dict, FrozenSet, Optional, Collection
 from numbers import Number
 
-from ..candidate import Candidate
-from ..vote import RankedVoteType
-from ..evaluate.proportional import LargestRemainder
-from ..persist import simple_serialization
+from votelib.candidate import Candidate
+from votelib.vote import RankedVoteType
+from votelib.evaluate.proportional import LargestRemainder
+from votelib.persist import simple_serialization
 
 
 RankedVoteAllocation = Dict[Optional[Candidate], Dict[RankedVoteType, Number]]

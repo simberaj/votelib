@@ -24,13 +24,13 @@ from decimal import Decimal
 from typing import Callable
 from numbers import Number
 
-from . import core
+import votelib.component.core
 
 
 DIVISORS = {}
 
 
-divisor_mark, get, construct = core.register_functions(
+divisor_mark, get, construct = votelib.component.core.register_functions(
     DIVISORS, 'divisor', Callable[[int], Number]
 )
 

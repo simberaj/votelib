@@ -13,14 +13,17 @@ from fractions import Fraction
 from typing import Any, List, Dict, Tuple, Union, Callable, Optional
 from numbers import Number
 
-from ..candidate import Candidate
-from ..vote import RankedVoteType
-from ..component import transfer, quota
-from ..persist import simple_serialization
-from . import core
-from .. import util, persist
 
-RankedVoteAllocation = transfer.RankedVoteAllocation
+import votelib.persist
+import votelib.util
+import votelib.component.quota
+import votelib.component.transfer
+import votelib.evaluate.core
+from votelib.candidate import Candidate
+from votelib.vote import RankedVoteType
+from votelib.persist import simple_serialization
+
+RankedVoteAllocation = votelib.component.transfer.RankedVoteAllocation
 
 INF = float('inf')
 
@@ -53,10 +56,10 @@ class TransferableVoteDistributor:
 
     :param transferer: An instance determining how much votes for eliminated
         candidates to transfer and to whom. It must provide the
-        :class:`transfer.VoteTransferer` interface (experimental, stability
-        not guaranteed). The basic vote transfer variants are implemented
-        in the :mod:`transfer` module and can be referred to by their names
-        as strings.
+        :class:`votelib.component.transfer.VoteTransferer` interface
+        (experimental, stability not guaranteed). The basic vote transfer
+        variants are implemented in the :mod:`votelib.component.transfer`
+        module and can be referred to by their names as strings.
     :param retainer: A selector determining which candidates to retain when
         elimination is to be performed (it may accept a number of seats, which
         will correspond to the number of candidates to retain). If not given,
@@ -71,7 +74,8 @@ class TransferableVoteDistributor:
         properly.
     :param quota_function: A callable producing the quota threshold from the
         total number of votes and number of seats. The common quota functions
-        can be referenced by string name from the :mod:`quota` module. If
+        can be referenced by string name from the
+        :mod:`votelib.component.quota` module. If
         None, no election by quota takes place - the candidates are just
         eliminated until the desired number remains. (Not specifying the quota
         only works when the maximum numbers of seats per candidate are
@@ -80,8 +84,10 @@ class TransferableVoteDistributor:
         number of votes against the quota.
     '''
     def __init__(self,
-                 transferer: Union[str, transfer.VoteTransferer] = 'Gregory',
-                 retainer: Optional[core.Selector] = None,
+                 transferer: Union[
+                     str, votelib.component.transfer.VoteTransferer
+                 ] = 'Gregory',
+                 retainer: Optional[votelib.evaluate.core.Selector] = None,
                  eliminate_step: Optional[int] = -1,
                  quota_function: Union[
                      str, Callable[[int, int], Number], None
@@ -90,11 +96,14 @@ class TransferableVoteDistributor:
                  # use_breakpoints: bool = True, - quota + applied
                  ):
         self.transferer = (
-            getattr(transfer, transferer)() if isinstance(transferer, str)
+            getattr(votelib.component.transfer, transferer)()
+            if isinstance(transferer, str)
             else transferer
         )
         if quota_function is not None:
-            self.quota_function = quota.construct(quota_function)
+            self.quota_function = votelib.component.quota.construct(
+                quota_function
+            )
         else:
             self.quota_function = None
         self.accept_quota_equal = accept_quota_equal
@@ -177,7 +186,9 @@ class TransferableVoteDistributor:
                 })
                 logger.debug('vote totals after election subtraction: %s',
                              self._totals(allocation))
-                current_seats = util.sum_dicts(quota_elected, prev_gains)
+                current_seats = votelib.util.sum_dicts(
+                    quota_elected, prev_gains
+                )
                 eliminated = [
                     cand for cand in quota_elected
                     if current_seats.get(cand, 0) >= max_seats.get(cand, INF)
@@ -245,8 +256,10 @@ class TransferableVoteDistributor:
             if count_i > 10:
                 raise NotImplementedError
             if not newly_elected and new_allocation == allocation:
-                raise core.VotingSystemError('infinite loop in STV')
-            util.add_dict_to_dict(seats, newly_elected)
+                raise votelib.evaluate.core.VotingSystemError(
+                    'infinite loop in STV'
+                )
+            votelib.util.add_dict_to_dict(seats, newly_elected)
         return self._totals(allocation), seats
 
     def _compute_quota(self,
@@ -297,8 +310,8 @@ class TransferableVoteDistributor:
                            overcounts: Dict[Candidate, Number],
                            n_rem_seats: int,
                            ) -> Dict[Candidate, int]:
-        kept = core.get_n_best(overcounts, n_rem_seats)
-        if any(isinstance(e, core.Tie) for e in kept):
+        kept = votelib.evaluate.core.get_n_best(overcounts, n_rem_seats)
+        if any(isinstance(e, votelib.evaluate.core.Tie) for e in kept):
             raise NotImplementedError('tie in STV quota election')
         else:
             return {
@@ -320,7 +333,7 @@ class TransferableVoteDistributor:
             first preference votes will be assigned to an empty dictionary.
         '''
         first_prefs = {
-            cand: {} for cand in util.all_ranked_candidates(votes)
+            cand: {} for cand in votelib.util.all_ranked_candidates(votes)
         }
         FICTIONAL = object()
         for vote, n_votes in votes.items():
@@ -362,15 +375,15 @@ class TransferableVoteDistributor:
             if cand is not None
         }
         if self.retainer:
-            if core.accepts_seats(self.retainer):
+            if votelib.evaluate.core.accepts_seats(self.retainer):
                 n_seats = self._retained_count(totals_in_play)
                 retained = self.retainer.evaluate(totals_in_play, n_seats)
             else:
                 retained = self.retainer.evaluate(totals_in_play)
         else:
             n_seats = self._retained_count(totals_in_play)
-            retained = core.get_n_best(totals, n_seats)
-        if any(isinstance(e, core.Tie) for e in retained):
+            retained = votelib.evaluate.core.get_n_best(totals, n_seats)
+        if any(isinstance(e, votelib.evaluate.core.Tie) for e in retained):
             raise NotImplementedError('tie in STV elimination')
         return retained
 
@@ -424,7 +437,7 @@ class TransferableVoteSelector:
         '''
         all_cands = set()
         for cand, alloc_votes in allocation:
-            all_cands.update(util.all_ranked_candidates(alloc_votes))
+            all_cands.update(votelib.util.all_ranked_candidates(alloc_votes))
         new_alloc, newly_elected = self._inner.next_count(
             allocation,
             n_seats,
@@ -432,7 +445,7 @@ class TransferableVoteSelector:
             prev_gains={c: 1 for c in elected},
             max_seats={c: 1 for c in all_cands}
         )
-        return new_alloc, util.distribution_to_selection(newly_elected)
+        return new_alloc, votelib.util.distribution_to_selection(newly_elected)
 
     def nth_count(self,
                   votes: Dict[RankedVoteType, Number],
@@ -447,14 +460,14 @@ class TransferableVoteSelector:
         :returns: A 2-tuple containing the allocation of votes after the given
             count and a list of elected candidates so far (might be empty).
         '''
-        all_cands = util.all_ranked_candidates(votes)
+        all_cands = votelib.util.all_ranked_candidates(votes)
         allocation, elected_dict = self._inner.nth_count(
             votes,
             n_seats,
             count_number,
             max_seats={c: 1 for c in all_cands}
         )
-        return allocation, util.distribution_to_selection(elected_dict)
+        return allocation, votelib.util.distribution_to_selection(elected_dict)
 
     @property
     def quota_function(self):
@@ -462,7 +475,7 @@ class TransferableVoteSelector:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            'class': persist.scoped_class_name(self),
+            'class': votelib.persist.scoped_class_name(self),
             '_inner': self._inner.to_dict(),
         }
 
@@ -522,10 +535,13 @@ class PreferenceAddition:
             # take all that have achieved majority, ordered by the vote sum
             majority = {
                 cand: n_votes
-                for cand, n_votes in util.sorted_votes(total_votes)
+                for cand, n_votes in votelib.util.sorted_votes(total_votes)
                 if n_votes > majority_quota
             }
-            best = core.get_n_best(majority, n_seats - len(elected))
+            best = votelib.evaluate.core.get_n_best(
+                majority,
+                n_seats - len(elected)
+            )
             elected.extend(best)
             if len(elected) == n_seats:
                 break
@@ -534,7 +550,7 @@ class PreferenceAddition:
                     if cand in total_votes:
                         del total_votes[cand]
             # if still not enough elected, go on by adding another preference
-        return core.Tie.reconcile(elected)
+        return votelib.evaluate.core.Tie.reconcile(elected)
 
     def _decouple_equal_rankings(self,
                                  votes: Dict[RankedVoteType, int]

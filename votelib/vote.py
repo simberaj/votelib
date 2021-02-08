@@ -35,9 +35,9 @@ from numbers import Number
 
 import collections
 
-from . import candidate
-from .candidate import Candidate
-from .persist import simple_serialization
+import votelib.candidate
+from votelib.candidate import Candidate
+from votelib.persist import simple_serialization
 
 
 class VoteError(Exception, metaclass=abc.ABCMeta):
@@ -184,6 +184,8 @@ class VoteValidator(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
+DEFAULT_NOMINATOR = votelib.candidate.BasicNominator()
+
 @simple_serialization
 class SimpleVoteValidator:
     '''Validate a simple vote (voting directly for a single candidate).
@@ -195,7 +197,7 @@ class SimpleVoteValidator:
         technical criteria specified by the :class:`Candidate` class.
     '''
     def __init__(self,
-                 nominator: candidate.Nominator = candidate.BasicNominator(),
+                 nominator: votelib.candidate.Nominator = DEFAULT_NOMINATOR,
                  ):
         self.nominator = nominator
 
@@ -229,7 +231,7 @@ class ApprovalVoteValidator:
     def __init__(self,
                  vote_count_bounds: IntBoundsTupleType = (None, None),
                  count_checker: Optional[VoteMagnitudeChecker] = None,
-                 nominator: candidate.Nominator = candidate.BasicNominator(),
+                 nominator: votelib.candidate.Nominator = DEFAULT_NOMINATOR,
                  ):
         if count_checker is None:
             count_checker = VoteMagnitudeChecker(vote_count_bounds)
@@ -295,7 +297,7 @@ class RankedVoteValidator:
                  rank_vote_count_checkers: Optional[
                      Dict[int, VoteMagnitudeChecker]
                  ] = None,
-                 nominator: candidate.Nominator = candidate.BasicNominator(),
+                 nominator: votelib.candidate.Nominator = DEFAULT_NOMINATOR,
                  ):
         if total_count_checker is None:
             total_count_checker = VoteMagnitudeChecker(total_vote_count_bounds)
@@ -359,7 +361,7 @@ class ScoreVoteValidator:
                  sum_checkers: Optional[
                      Dict[int, VoteMagnitudeChecker]
                  ] = None,
-                 nominator: candidate.Nominator = candidate.BasicNominator(),
+                 nominator: votelib.candidate.Nominator = DEFAULT_NOMINATOR,
                  ):
         if n_scorings_checker is None:
             n_scorings_checker = VoteMagnitudeChecker(allowed_scorings)
@@ -448,7 +450,7 @@ class EnumScoreVoteValidator(ScoreVoteValidator):
                  sum_checkers: Optional[
                      Dict[int, VoteMagnitudeChecker]
                  ] = None,
-                 nominator: candidate.Nominator = candidate.BasicNominator(),
+                 nominator: votelib.candidate.Nominator = DEFAULT_NOMINATOR,
                  ):
         super().__init__(
             allowed_scorings, sum_bounds,
@@ -526,7 +528,7 @@ class RangeVoteValidator(ScoreVoteValidator):
                  sum_checkers: Optional[
                      Dict[int, VoteMagnitudeChecker]
                  ] = None,
-                 nominator: candidate.Nominator = candidate.BasicNominator(),
+                 nominator: votelib.candidate.Nominator = DEFAULT_NOMINATOR,
                  ):
         super().__init__(
             allowed_scorings, sum_bounds,

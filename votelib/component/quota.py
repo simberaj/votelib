@@ -17,13 +17,13 @@ from fractions import Fraction
 from typing import Callable
 from numbers import Number
 
-from . import core
+import votelib.component.core
 
 
 QUOTAS = {}
 
 
-quota_mark, get, construct = core.register_functions(
+quota_mark, get, construct = votelib.component.core.register_functions(
     QUOTAS, 'quota', Callable[[int], Number]
 )
 

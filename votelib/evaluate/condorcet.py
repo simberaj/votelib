@@ -23,10 +23,10 @@ import collections
 from typing import List, Tuple, Dict, Union, Callable, Collection
 from numbers import Number
 
-from . import core
-from ..candidate import Candidate
-from ..component import pairwin_scorer
-from ..persist import simple_serialization
+import votelib.evaluate.core
+import votelib.component.pairwin_scorer
+from votelib.candidate import Candidate
+from votelib.persist import simple_serialization
 
 
 def pairwise_wins(votes: Dict[Tuple[Candidate, Candidate], int],
@@ -193,8 +193,8 @@ class Copeland:
         '''
         wins = pairwise_wins(votes)
         scores = self.scores(wins)
-        best = core.get_n_best(scores, n_seats)
-        if self.second_order and core.Tie.any(best):
+        best = votelib.evaluate.core.get_n_best(scores, n_seats)
+        if self.second_order and votelib.evaluate.core.Tie.any(best):
             return self.break_second_order(best, scores, wins)
         else:
             return best
@@ -209,14 +209,17 @@ class Copeland:
         return dict(scores)
 
     def break_second_order(self,
-                           best: List[Union[Candidate, core.Tie]],
+                           best: List[Union[
+                               Candidate,
+                               votelib.evaluate.core.Tie
+                           ]],
                            scores: Dict[Candidate, int],
                            wins: List[Tuple[Candidate, Candidate]],
                            ) -> List[Candidate]:
         untied = []
         tied = set()
         for selected in best:
-            if isinstance(selected, core.Tie):
+            if isinstance(selected, votelib.evaluate.core.Tie):
                 tied.update(selected)
             else:
                 untied.append(selected)
@@ -224,7 +227,7 @@ class Copeland:
         for winner, loser in wins:
             if winner in tied:
                 second_order_scores[winner] += scores[loser]
-        return untied + core.get_n_best(
+        return untied + votelib.evaluate.core.get_n_best(
             second_order_scores, len(best) - len(untied)
         )
 
@@ -254,7 +257,7 @@ class Schulze:
         for winner, loser in pairwise_wins(paths):
             scores[winner] += 1
             scores[loser]    # to make zero appear if not present
-        return core.get_n_best(scores, n_seats)
+        return votelib.evaluate.core.get_n_best(scores, n_seats)
 
     @staticmethod
     def widest_paths(counts: Dict[Tuple[Candidate, Candidate], Number]
@@ -325,7 +328,9 @@ class KemenyYoung:
         if len(best_variants) == 1:
             return best_variants[0][:n_seats]
         else:
-            return core.Tie.tie_rankings(best_variants)[:n_seats]
+            return votelib.evaluate.core.Tie.tie_rankings(
+                best_variants
+            )[:n_seats]
 
     @staticmethod
     def score(variant: Collection[Candidate],
@@ -358,13 +363,15 @@ class MinimaxCondorcet:
     according to the pairwise win scorer provided.
 
     :param pairwin_scoring: A pairwise win scorer callable. Most common
-        variants are found in the :mod:`pairwin_scorer` module and can be
-        referred to by their names.
+        variants are found in the :mod:`votelib.component.pairwin_scorer`
+        module and can be referred to by their names.
     '''
     def __init__(self,
                  pairwin_scoring: Union[str, Callable] = 'winning_votes',
                  ):
-        self.pairwin_scoring = pairwin_scorer.construct(pairwin_scoring)
+        self.pairwin_scoring = votelib.component.pairwin_scorer.construct(
+            pairwin_scoring
+        )
 
     def evaluate(self,
                  votes: Dict[Tuple[Candidate, Candidate], int],
@@ -384,7 +391,7 @@ class MinimaxCondorcet:
                 max_counterscore.get(pair[1], -float('inf')),
                 score
             )
-        return core.get_n_best(
+        return votelib.evaluate.core.get_n_best(
             {cand: -score for cand, score in max_counterscore.items()},
             n_seats
         )
@@ -402,13 +409,15 @@ class RankedPairs:
     according to the pairwise win scorer provided.
 
     :param pairwin_scoring: A pairwise win scorer callable. Most common
-        variants are found in the :mod:`pairwin_scorer` module and can be
-        referred to by their names.
+        variants are found in the :mod:`votelib.component.pairwin_scorer`
+        module and can be referred to by their names.
     '''
     def __init__(self,
                  pairwin_scoring: Union[str, Callable] = 'winning_votes',
                  ):
-        self.pairwin_scoring = pairwin_scorer.construct(pairwin_scoring)
+        self.pairwin_scoring = votelib.component.pairwin_scorer.construct(
+            pairwin_scoring
+        )
 
     def evaluate(self,
                  votes: Dict[Tuple[Candidate, Candidate], int],
@@ -469,7 +478,7 @@ class RankedPairs:
                 losers.add(loser)
             winners.difference_update(losers)
             if len(winners) != 1:
-                raise core.VotingSystemError
+                raise votelib.evaluate.core.VotingSystemError
             winner = winners.pop()
             ranking.append(winner)
             edges = [edge for edge in edges if edge[0] != winner]

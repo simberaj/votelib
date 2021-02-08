@@ -25,11 +25,11 @@ from typing import Any, List, Dict, Union, Callable
 from numbers import Number
 from fractions import Fraction
 
-from . import core
-from .. import util
-from ..candidate import Candidate
-from ..component import quota
-from ..persist import simple_serialization
+import votelib.util
+import votelib.component.quota
+import votelib.evaluate.core
+from votelib.candidate import Candidate
+from votelib.persist import simple_serialization
 
 
 @simple_serialization
@@ -52,8 +52,9 @@ class ThresholdOpenList:
     :param quota_function: A callable producing the quota threshold (number
         of votes required to jump) from the
         total number of votes and number of seats. The common quota functions
-        can be referenced by string name from the :mod:`quota` module. The Hare
-        quota (``'hare'``) is used most frequently.
+        can be referenced by string name from the
+        :mod:`votelib.component.quota` module. The Hare quota (``'hare'``)
+        is used most frequently.
     :param quota_fraction: A number to multiply the calculated quota with, to
         allow e.g. all candidates that got at least half of the quota to jump.
     :param take_higher: If both the jump fraction and quota are specified,
@@ -80,7 +81,7 @@ class ThresholdOpenList:
         self.jump_fraction = jump_fraction
         self.quota_fraction = quota_fraction
         if quota_function is not None and quota_fraction != 1:
-            wrapped = quota.construct(quota_function)
+            wrapped = votelib.component.quota.construct(quota_function)
 
             def _quota_fractional(votes: int, seats: int) -> Fraction:
                 return wrapped(votes, seats) * quota_fraction
@@ -116,7 +117,7 @@ class ThresholdOpenList:
             # selects all over (or equaling) the threshold, sorted by votes
             threshold = (max if self.take_higher else min)(jump_thresholds)
             jumping = [
-                cand for cand, n_votes in util.sorted_votes(votes)
+                cand for cand, n_votes in votelib.util.sorted_votes(votes)
                 if n_votes > threshold or (
                     self.accept_equal and n_votes == threshold
                 )
@@ -151,7 +152,7 @@ class ListOrderTieBreaker:
 
     :param evaluator: Any selection evaluator.
     '''
-    def __init__(self, evaluator: core.Selector):
+    def __init__(self, evaluator: votelib.evaluate.core.Selector):
         self.evaluator = evaluator
 
     def evaluate(self,
@@ -168,7 +169,9 @@ class ListOrderTieBreaker:
         :param candidate_list: The original (party-determined) list ordering.
         '''
         inner_result = self.evaluator.evaluate(votes, n_seats)
-        if core.Tie.any(inner_result):
-            return core.Tie.break_by_list(inner_result, candidate_list)
+        if votelib.evaluate.core.Tie.any(inner_result):
+            return votelib.evaluate.core.Tie.break_by_list(
+                inner_result, candidate_list
+            )
         else:
             return inner_result
