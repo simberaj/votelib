@@ -3,6 +3,7 @@ import sys
 import os
 import itertools
 import random
+from decimal import Decimal
 
 import pytest
 
@@ -17,6 +18,7 @@ RAND_VOTES = [
 STABLE_SORTITORS = [
     votelib.evaluate.auxiliary.RandomUnrankedBallotSelector(seed=1711),
     votelib.evaluate.auxiliary.Sortitor(seed=1711),
+    votelib.evaluate.auxiliary.RFC3797Selector(sources=[1.25, [5, 3], 8]),
 ]
 
 UNSTABLE_SORTITORS = [
@@ -67,3 +69,28 @@ def test_inporder():
     eval = votelib.evaluate.auxiliary.InputOrderSelector()
     result = eval.evaluate(votes, 2)
     assert result == ['A', 'B']
+
+
+@pytest.mark.parametrize('sources, result', [
+    ([1.25, [5, 3], 8], b'1.25/3.5./8./'),
+    (['Mažňák', Decimal('0.1'), [4, 6, 9]], b'MAZNAK/0.1/4.6.9./'),
+])
+def test_rfc3797_sourcecomp(sources, result):
+    assert votelib.evaluate.auxiliary.RFC3797Selector.source_bytestring(sources) == result
+
+
+def test_rfc3797_result():
+    sel = votelib.evaluate.auxiliary.RFC3797Selector(['Mažňák', Decimal('0.1'), [4, 6, 9]])
+    assert sel.evaluate(dict(zip('ABCDEFGHIJ', [1]*10)), 2) == ['J', 'H']
+
+
+def test_rfc3797_origex():
+    sel = votelib.evaluate.auxiliary.RFC3797Selector([
+        9319,
+        [2, 5, 12, 8, 10],
+        [9, 18, 26, 34, 41, 45],
+    ])
+    assert sel.seed_bytes == b'9319./2.5.8.10.12./9.18.26.34.41.45./'
+    assert sel.evaluate(dict(zip(range(1, 26), [1]*25)), 11) == [
+        17, 7, 2, 16, 25, 23, 8, 24, 19, 13, 22
+    ]
