@@ -24,9 +24,9 @@ def loads(blt_text: str, **kwargs) -> BLTSpecContents:
     return _load(iter(blt_text.split('\n')), **kwargs)
 
 
-def dump(votes: Dict[Tuple[Candidate, ...], Number],
+def dump(blt_file: TextIO,
+         votes: Dict[Tuple[Candidate, ...], Number],
          n_seats: int,
-         blt_file: TextIO,
          candidates: Optional[List[Candidate]] = None,
          election_name: Optional[str] = None,
          **kwargs) -> None:
@@ -49,8 +49,6 @@ def _dump(votes: Dict[Tuple[Candidate, ...], Number],
           ) -> Iterable[str]:
     if candidates is None:
         candidates = _gather_candidates(votes)
-    if election_name is None:
-        election_name = 'Unknown election'
     yield _dump_numline([len(candidates), n_seats])
     for i in _get_withdrawn_inds(candidates):
         yield _dump_numline([-(i+i)])
@@ -64,7 +62,18 @@ def _dump(votes: Dict[Tuple[Candidate, ...], Number],
             else:
                 cand = str(cand)
         yield _dump_strline(cand)
-    yield _dump_strline(election_name)
+    if election_name is not None:
+        yield _dump_strline(election_name)
+
+
+def _gather_candidates(votes: Dict[Tuple[Candidate, ...], Number]
+                       ) -> List[Candidate]:
+    cands = []
+    for prefs in votes:
+        for cand in prefs:
+            if cand not in cands:
+                cands.append(cand)
+    return cands
 
 
 def _get_withdrawn_inds(candidates: List[Candidate]) -> List[int]:
@@ -161,9 +170,7 @@ def _parse_body(blt_lines: Iterable[str],
     ballots_encountered = False
     for line in blt_lines:
         result = _parse_numline(line, allow_first_decimal=True)
-        if isinstance(result, str):
-            raise ValueError(f'string line in BLT ballot part: {result!r}')
-        elif not result:
+        if not result:
             continue    # ignore empty lines
         elif result == [0]:
             # End-of-ballots line, return.
