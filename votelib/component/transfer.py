@@ -11,6 +11,7 @@ in the future, chiefly to accommodate a wider range of transfer methods (Meek,
 Wright...)
 '''
 
+import sys
 import abc
 import collections
 import random
@@ -18,7 +19,7 @@ import itertools
 import bisect
 import functools
 from fractions import Fraction
-from typing import Any, List, Dict, FrozenSet, Optional, Collection
+from typing import Any, List, Dict, FrozenSet, Optional, Collection, Union
 from numbers import Number
 
 from votelib.candidate import Candidate
@@ -322,3 +323,11 @@ class Gregory(SimpleVoteTransferer):
                                   ) -> Dict[Candidate, Fraction]:
         split_val = Fraction(n_votes, len(targets))
         return {cand: split_val for cand in targets}
+
+
+def construct(trans_def: Union[VoteTransferer, str]) -> VoteTransferer:
+    return (
+        getattr(sys.modules[__name__], trans_def)()
+        if isinstance(trans_def, str)
+        else trans_def
+    )

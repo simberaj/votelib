@@ -97,6 +97,13 @@ class Selector:
         raise NotImplementedError
 
 
+class SeatlessSelector:
+    def evaluate(self,
+                 votes: Dict[Tuple[Candidate, Candidate], int],
+                 ) -> List[Candidate]:
+        raise NotImplementedError
+
+
 @simple_serialization
 class CondorcetWinner:
     """Condorcet winner selector.

@@ -186,6 +186,7 @@ class VoteValidator(metaclass=abc.ABCMeta):
 
 DEFAULT_NOMINATOR = votelib.candidate.BasicNominator()
 
+
 @simple_serialization
 class SimpleVoteValidator:
     '''Validate a simple vote (voting directly for a single candidate).

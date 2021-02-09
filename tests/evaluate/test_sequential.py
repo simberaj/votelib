@@ -9,6 +9,8 @@ import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 import votelib.evaluate.sequential
+import votelib.evaluate.core
+import votelib.evaluate.condorcet
 
 DEFAULT_STV = votelib.evaluate.sequential.TransferableVoteSelector(
     quota_function='droop'
@@ -240,3 +242,42 @@ def test_noncw_irv():
         tuple('BCA'): 31,
     }
     assert DEFAULT_STV.evaluate(votes, 1) == ['C']
+
+
+GA1_VOTES = {
+    tuple('DABC'): 6,
+    tuple('BCAD'): 5,
+    tuple('CABD'): 4,
+}
+GA2_VOTES = {
+    tuple('CDAB'): 6,
+    tuple('BDAC'): 5,
+    tuple('ABCD'): 4,
+}
+TIDALT = votelib.evaluate.sequential.TidemanAlternative()
+SMITH_AV = votelib.evaluate.core.Conditioned(
+    votelib.evaluate.core.PreConverted(
+        votelib.convert.RankedToCondorcetVotes(),
+        votelib.evaluate.condorcet.SmithSet()
+    ),
+    votelib.evaluate.sequential.TransferableVoteSelector(quota_function=None),
+    subsetter=votelib.vote.RankedSubsetter(),
+)
+BENHAM = votelib.evaluate.sequential.Benham()
+
+
+@pytest.mark.parametrize('ev, votes, expected', [
+    (TIDALT, GA1_VOTES, 'A'),
+    (SMITH_AV, GA1_VOTES, 'A'),
+    (BENHAM, GA1_VOTES, 'B'),
+    (TIDALT, GA2_VOTES, 'A'),
+    (SMITH_AV, GA2_VOTES, 'B'),
+    (BENHAM, GA2_VOTES, 'A'),
+])
+def test_ga(ev, votes, expected):
+    # http://www.votingmatters.org.uk/ISSUE29/I29P1.pdf
+    if votelib.evaluate.core.accepts_seats(ev):
+        result = ev.evaluate(votes, 1)
+    else:
+        result = ev.evaluate(votes)
+    assert result == [expected]

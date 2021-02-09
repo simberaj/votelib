@@ -19,6 +19,7 @@ import votelib.util
 import votelib.component.quota
 import votelib.component.transfer
 import votelib.evaluate.core
+import votelib.evaluate.condorcet
 from votelib.candidate import Candidate
 from votelib.vote import RankedVoteType
 from votelib.persist import simple_serialization
@@ -95,11 +96,7 @@ class TransferableVoteDistributor:
                  accept_quota_equal: bool = True,
                  # use_breakpoints: bool = True, - quota + applied
                  ):
-        self.transferer = (
-            getattr(votelib.component.transfer, transferer)()
-            if isinstance(transferer, str)
-            else transferer
-        )
+        self.transferer = votelib.component.transfer.construct(transferer)
         if quota_function is not None:
             self.quota_function = votelib.component.quota.construct(
                 quota_function
@@ -158,7 +155,7 @@ class TransferableVoteDistributor:
             no seats were awarded on this count).
         '''
         n_rem_seats = n_seats - sum(prev_gains.values())
-        totals = self._totals(allocation)
+        totals = allocation_totals(allocation)
         avail_seats = {
             cand: max_seats.get(cand, INF) - prev_gains.get(cand, 0)
             for cand in sorted(allocation, key=totals.get, reverse=True)
@@ -185,7 +182,7 @@ class TransferableVoteDistributor:
                     for cand, n_seats in quota_elected.items()
                 })
                 logger.debug('vote totals after election subtraction: %s',
-                             self._totals(allocation))
+                             allocation_totals(allocation))
                 current_seats = votelib.util.sum_dicts(
                     quota_elected, prev_gains
                 )
@@ -210,15 +207,8 @@ class TransferableVoteDistributor:
             else:
                 new_allocation = allocation
             logger.debug('vote totals after transfer: %s',
-                         self._totals(new_allocation))
+                         allocation_totals(new_allocation))
             return new_allocation, quota_elected
-
-    @staticmethod
-    def _totals(allocation: RankedVoteAllocation) -> Dict[Candidate, Number]:
-        return {
-            cand: sum(cand_votes.values())
-            for cand, cand_votes in allocation.items()
-        }
 
     def nth_count(self,
                   votes: Dict[RankedVoteType, Number],
@@ -235,7 +225,7 @@ class TransferableVoteDistributor:
         :returns: A 2-tuple containing the allocation of votes after the given
             count and a list of elected candidates so far (might be empty).
         '''
-        allocation = self.first_preference_allocation(votes)
+        allocation = initial_allocation(votes, self.transferer)
         total_n_votes = sum(votes.values())    # needed for quota
         new_allocation = None
         seats = prev_gains.copy()
@@ -260,7 +250,7 @@ class TransferableVoteDistributor:
                     'infinite loop in STV'
                 )
             votelib.util.add_dict_to_dict(seats, newly_elected)
-        return self._totals(allocation), seats
+        return allocation_totals(allocation), seats
 
     def _compute_quota(self,
                        total_n_votes: Optional[Number],
@@ -320,53 +310,6 @@ class TransferableVoteDistributor:
                 if cand in kept or n_seats > 1
             }
 
-    def first_preference_allocation(self,
-                                    votes: Dict[RankedVoteType, Number],
-                                    ) -> RankedVoteAllocation:
-        '''Allocate votes by first preference.
-
-        Performed at the beginning of the first count.
-
-        :param votes: Ranked votes.
-        :returns: The votes dictionary separated into subdictionaries keyed by
-            candidate to whom the votes are allocated. A candidate with no
-            first preference votes will be assigned to an empty dictionary.
-        '''
-        first_prefs = {
-            cand: {} for cand in votelib.util.all_ranked_candidates(votes)
-        }
-        FICTIONAL = object()
-        for vote, n_votes in votes.items():
-            if not vote:
-                continue    # for empty votes
-            first_pref = vote[0]
-            if isinstance(first_pref, collections.abc.Set):
-                # first rank is shared
-                # we pass this to transferer - we prepend a fictional (None)
-                # eliminated candidate to this vote and have it transferred
-                if FICTIONAL not in first_prefs:
-                    first_prefs[FICTIONAL] = {}
-                first_prefs[FICTIONAL][(FICTIONAL,) + vote] = n_votes
-            else:
-                first_prefs[first_pref][vote] = n_votes
-        if first_prefs.get(FICTIONAL):
-            split_alloc = self.transferer.transfer(
-                first_prefs, candidates=[FICTIONAL],
-            )
-            for cand_alloc in split_alloc.values():
-                to_remove = []
-                to_update = {}
-                for vote, n_votes in cand_alloc.items():
-                    if vote[0] is FICTIONAL:
-                        to_remove.append(vote)
-                        to_update[vote[1:]] = n_votes
-                for vote in to_remove:
-                    del cand_alloc[vote]
-                cand_alloc.update(to_update)
-            return split_alloc
-        else:
-            return first_prefs
-
     def select_retained(self,
                         totals: Dict[Optional[Candidate], Number]
                         ) -> List[Candidate]:
@@ -395,6 +338,63 @@ class TransferableVoteDistributor:
             return max(len(totals) + self.eliminate_step, 1)
         else:
             return min(self.eliminate_step, len(totals) - 1)
+
+
+def initial_allocation(votes: Dict[RankedVoteType, Number],
+                       transferer: votelib.component.transfer.VoteTransferer =
+                           votelib.component.transfer.Gregory(),
+                       ) -> RankedVoteAllocation:
+    '''Allocate votes by first preference.
+
+    :param votes: Ranked votes.
+    :param transferer: A :class:`votelib.component.transfer.VoteTransferer`
+        to transfer votes from shared first ranks among their candidates.
+    :returns: The votes dictionary separated into subdictionaries keyed by
+        candidate to whom the votes are allocated. A candidate with no
+        first preference votes will be assigned to an empty dictionary.
+    '''
+    first_prefs = {
+        cand: {} for cand in votelib.util.all_ranked_candidates(votes)
+    }
+    FICTIONAL = object()
+    for vote, n_votes in votes.items():
+        if not vote:
+            continue    # for empty votes
+        first_pref = vote[0]
+        if isinstance(first_pref, collections.abc.Set):
+            # first rank is shared
+            # we pass this to transferer - we prepend a fictional (None)
+            # eliminated candidate to this vote and have it transferred
+            if FICTIONAL not in first_prefs:
+                first_prefs[FICTIONAL] = {}
+            first_prefs[FICTIONAL][(FICTIONAL,) + vote] = n_votes
+        else:
+            first_prefs[first_pref][vote] = n_votes
+    if first_prefs.get(FICTIONAL):
+        split_alloc = transferer.transfer(
+            first_prefs, candidates=[FICTIONAL],
+        )
+        for cand_alloc in split_alloc.values():
+            to_remove = []
+            to_update = {}
+            for vote, n_votes in cand_alloc.items():
+                if vote[0] is FICTIONAL:
+                    to_remove.append(vote)
+                    to_update[vote[1:]] = n_votes
+            for vote in to_remove:
+                del cand_alloc[vote]
+            cand_alloc.update(to_update)
+        return split_alloc
+    else:
+        return first_prefs
+
+
+def allocation_totals(allocation: RankedVoteAllocation
+                      ) -> Dict[Candidate, Number]:
+    return {
+        cand: sum(cand_votes.values())
+        for cand, cand_votes in allocation.items()
+    }
 
 
 class TransferableVoteSelector:
@@ -610,3 +610,104 @@ class PreferenceAddition:
             return self.coefficients[pref_i]
         else:
             return self.coefficients[-1]
+
+
+RANKED_SUBSETTER = votelib.convert.SubsettedVotes(
+    votelib.vote.RankedSubsetter()
+)
+RANKED_TO_CONDORCET = votelib.convert.RankedToCondorcetVotes()
+
+
+class TidemanAlternative:
+    '''Tideman alternative selector (Alternative Smith/Schwartz). [#tidaltw]_
+
+    Uses a Smith or Schwartz set selector; if the set has multiple members,
+    eliminates one candidate by transferable vote (instant-runoff) and reruns.
+    For election of multiple candidates, it runs in multiple tiers where
+    previous winners are eliminated from all following tiers. [#gacondo]_
+
+    :param set_selector: The Smith/Schwartz set selector. Any seatless selector
+        that accepts the Condorcet (pairwise preference) vote format.
+
+    .. [#tidaltw] "Tideman alternative method", Wikipedia.
+        https://en.wikipedia.org/wiki/Tideman_alternative_method
+    .. [#gacondo] Green-Armytage, James. "Four Condorcet-Hare Hybrid Methods
+        for Single-Winner Elections", Voting Matters.
+        http://www.votingmatters.org.uk/ISSUE29/I29P1.pdf
+    '''
+    def __init__(self,
+                 set_selector: votelib.evaluate.condorcet.SeatlessSelector =
+                     votelib.evaluate.condorcet.SmithSet(),
+                 ):
+        self.set_selector = set_selector
+
+    def evaluate(self,
+                 votes: Dict[RankedVoteType, int],
+                 n_seats: int = 1,
+                 ) -> List[Candidate]:
+        ranked_set = []
+        all_set = votelib.util.all_ranked_candidates(votes)
+        eligible_set = set(all_set)
+        tier_votes = votes
+        while True:
+            winner = self.run_tier(tier_votes)
+            logger.info('adding %s to winners', winner)
+            ranked_set.append(winner)
+            eligible_set.remove(winner)
+            if len(ranked_set) == n_seats or not eligible_set:
+                return ranked_set
+            else:
+                tier_votes = RANKED_SUBSETTER.convert(tier_votes)
+
+    def run_tier(self, votes: Dict[RankedVoteType, int]) -> Candidate:
+        round_votes = votes
+        while round_votes:
+            s_set_list = self.get_winner_set(round_votes)
+            logger.info('condorcet set: %s', s_set_list)
+            if len(s_set_list) == 1:
+                return s_set_list.pop()
+            else:
+                round_votes = RANKED_SUBSETTER.convert(round_votes, s_set_list)
+                rem = eliminate_one(round_votes)
+                logger.info('eliminated to %s', rem)
+                if len(rem) == 1:
+                    return rem.pop()
+                else:
+                    round_votes = RANKED_SUBSETTER.convert(round_votes, rem)
+        raise NotImplementedError
+
+    def get_winner_set(self,
+                       votes: Dict[RankedVoteType, int],
+                       ) -> List[Candidate]:
+        return self.set_selector.evaluate(RANKED_TO_CONDORCET.convert(votes))
+
+
+def eliminate_one(votes: Dict[RankedVoteType, int]) -> List[Candidate]:
+    return votelib.evaluate.core.get_n_best(
+        allocation_totals(initial_allocation(votes)),
+        len(votelib.util.all_ranked_candidates(votes)) - 1
+    )
+
+
+class Benham:
+    '''Benham sequential Condorcet selector. [#gacondo]_
+
+    Selects a Condorcet winner. If one does not exist, eliminates one candidate
+    using transferable vote (instant-runoff) and re-runs.
+    '''
+    CONDO = votelib.evaluate.condorcet.CondorcetWinner()
+
+    def evaluate(self, votes: Dict[RankedVoteType, int]) -> List[Candidate]:
+        current_votes = votes
+        condowin = self.get_condorcet_winner(current_votes)
+        while condowin is None:
+            remains = eliminate_one(current_votes)
+            current_votes = RANKED_SUBSETTER.convert(votes, remains)
+            condowin = self.get_condorcet_winner(current_votes)
+        return [condowin]
+
+    def get_condorcet_winner(self,
+                             votes: Dict[RankedVoteType, int],
+                             ) -> Optional[Candidate]:
+        condores = self.CONDO.evaluate(RANKED_TO_CONDORCET.convert(votes))
+        return condores[0] if condores else None
