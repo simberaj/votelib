@@ -9,9 +9,11 @@ from fractions import Fraction
 from typing import Any, List, Dict, Union, Optional
 from numbers import Number
 
-from .. import convert, util, vote
-from ..candidate import Candidate, Constituency, Person, ElectionParty
-from ..persist import simple_serialization
+import votelib.convert
+import votelib.util
+import votelib.vote
+from votelib.candidate import Candidate, Constituency, Person, ElectionParty
+from votelib.persist import simple_serialization
 
 
 class VotingSystemError(Exception):
@@ -112,7 +114,7 @@ def get_n_best(votes: Dict[Candidate, Number],
     :returns: A list of top n_seats candidates. If there is a tie, the last
         items will refer to a single Tie object containing the tied candidates.
     '''
-    sorted_items = util.sorted_votes(votes)
+    sorted_items = votelib.util.sorted_votes(votes)
     if len(sorted_items) > n_seats:
         # find if there is a tie between the last elected and first unelected
         threshold_votes = sorted_items[n_seats-1][1]
@@ -319,7 +321,7 @@ class MultistageDistributor:
 
     def _add_stage_results(self, elected, stage_res, depth):
         if depth == 1:
-            util.add_dict_to_dict(elected, stage_res)
+            votelib.util.add_dict_to_dict(elected, stage_res)
         else:
             for constituency in set(elected.keys()) | set(stage_res.keys()):
                 self._add_stage_results(
@@ -549,7 +551,7 @@ class LevelOverhangByConstituency:
         cty_results = self.constituency_evaluator.evaluate(
             votes, n_seats, max_seats=max_seats,
         )
-        lowest_allowed = convert.VoteTotals().convert({
+        lowest_allowed = votelib.convert.VoteTotals().convert({
             cty: {
                 party: max(prev_gains.get(cty, {}).get(party, 0), prop_seats)
                 for party, prop_seats in cty_prop_seats.items()
@@ -568,11 +570,11 @@ class LevelOverhangByConstituency:
         adj_count = n_seats - nonprop_drop
         overall_evaluator = self.overall_evaluator
         if overall_evaluator:
-            party_votes = convert.VoteTotals().convert(votes)
+            party_votes = votelib.convert.VoteTotals().convert(votes)
         else:
-            overall_evaluator = convert.PostConverted(
+            overall_evaluator = votelib.convert.PostConverted(
                 self.constituency_evaluator,
-                convert.DistributionMerger()
+                votelib.convert.DistributionMerger()
             )
             party_votes = votes
         # Progressively increase the number of seats until all parties get at
@@ -650,6 +652,9 @@ class PreConverted:
         return self.evaluator.evaluate(conv_votes, *args, **kwargs)
 
 
+DEFAULT_SUBSETTER = votelib.vote.SimpleSubsetter()
+
+
 @simple_serialization
 class Conditioned:
     '''An evaluator whose votes are pre-selected to exclude some variants.
@@ -670,12 +675,12 @@ class Conditioned:
     def __init__(self,
                  eliminator: SeatlessSelector,
                  evaluator: Evaluator,
-                 subsetter: Optional[convert.SubsettedVotes] = None,
+                 subsetter: Optional[votelib.vote.SimpleSubsetter] = None,
                  ):
         self.eliminator = eliminator
         self.evaluator = evaluator
         if subsetter is None:
-            subsetter = convert.SubsettedVotes(vote.SimpleSubsetter())
+            subsetter = DEFAULT_SUBSETTER
         self.subsetter = subsetter
 
     def evaluate(self,
@@ -700,7 +705,9 @@ class Conditioned:
             )
         else:
             not_eliminated = self.eliminator.evaluate(votes)
-        elim_votes = self.subsetter.convert(votes, not_eliminated)
+        elim_votes = votelib.convert.SubsettedVotes(self.subsetter).convert(
+            votes, not_eliminated
+        )
         if accepts_prev_gains(self.evaluator):
             kwargs = kwargs.copy()
             kwargs['prev_gains'] = prev_gains
@@ -725,7 +732,7 @@ class ByConstituency:
     is performed, because that is often defined before candidates are excluded.
     If this is not desired, define the selector and vote subsetter on a
     :class:`Conditioned` wrapper, with the selector wrapped in an additional
-    :class:`PreConverted` with :class:`convert.VoteTotals`,
+    :class:`PreConverted` with :class:`votelib.convert.VoteTotals`,
     and leave the selector undefined here.
 
     :param evaluator: Evaluator to use on the constituency level.
@@ -748,7 +755,7 @@ class ByConstituency:
                      Distributor, Dict[Constituency, int], int, None
                  ] = None,
                  preselector: Optional[Selector] = None,
-                 subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
+                 subsetter: votelib.vote.VoteSubsetter = DEFAULT_SUBSETTER,
                  ):
         self.evaluator = evaluator
         self.apportioner = apportioner
@@ -823,7 +830,7 @@ class ByConstituency:
             return None
         else:
             if preselected is not None:
-                votes = convert.SubsettedVotes(self.subsetter).convert(
+                votes = votelib.convert.SubsettedVotes(self.subsetter).convert(
                     votes, preselected
                 )
             if accepts_prev_gains(self.evaluator):
@@ -838,7 +845,7 @@ class ByConstituency:
     def _preselect(self, votes, n_seats):
         if self.preselector:
             # select candidates that passed national level conditions
-            nat_agg = convert.VoteTotals()
+            nat_agg = votelib.convert.VoteTotals()
             nat_votes = nat_agg.convert(votes)
             if accepts_seats(self.preselector):
                 return self.preselector.evaluate(nat_votes, n_seats)
@@ -873,7 +880,7 @@ class ByParty:
     def __init__(self,
                  overall_evaluator: Distributor,
                  allocator: Optional[Distributor] = None,
-                 subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
+                 subsetter: votelib.vote.VoteSubsetter = DEFAULT_SUBSETTER,
                  ):
         self.overall_evaluator = overall_evaluator
         self.allocator = allocator
@@ -900,14 +907,14 @@ class ByParty:
             (including previous gains). Not passed to the overall evaluator.
         :returns: Results of the evaluation by constituency.
         '''
-        overall_votes = convert.VoteTotals().convert(votes)
+        overall_votes = votelib.convert.VoteTotals().convert(votes)
         overall_result = self.overall_evaluator.evaluate(
             overall_votes, n_seats
         )
         allocator = self.allocator
         if allocator is None:
             allocator = self.overall_evaluator
-        subset_conv = convert.SubsettedVotes(self.subsetter)
+        subset_conv = votelib.convert.SubsettedVotes(self.subsetter)
         results = collections.defaultdict(dict)
         for party, n_party_seats in overall_result.items():
             party_votes = {
@@ -995,13 +1002,15 @@ class PartyListEvaluator:
     :param list_votes_converter: A converter to apply to list votes before
         passing to the list evaluator. The converter should produce a result
         where the candidate votes are grouped by party
-        (such as :class:`convert.GroupVotesByParty`). If not given, the list
-        votes are passed unchanged.
+        (such as :class:`votelib.convert.GroupVotesByParty`). If not given,
+        the list votes are passed unchanged.
     '''
     def __init__(self,
                  party_eval: Distributor,
                  list_eval: Optional[OpenListEvaluator] = None,
-                 list_votes_converter: Optional[convert.Converter] = None,
+                 list_votes_converter: Optional[
+                     votelib.convert.Converter
+                 ] = None,
                  ):
         self.party_eval = party_eval
         self.list_eval = list_eval
@@ -1097,13 +1106,13 @@ class Plurality:
         of approval voting such as proportional approval voting - see the
         :mod:`approval` for that). A multiwinner variant of approval voting
         is sometimes called block approval voting and exhibits very different
-        properties. Use :class:`convert.ApprovalToSimpleVotes` to convert
-        approval votes to a simple votes accepted by this evaluator.
+        properties. Use :class:`votelib.convert.ApprovalToSimpleVotes` to
+        convert approval votes to simple votes accepted by this evaluator.
     -   *Satisfaction approval voting* (SAV), with one arbitrarily splittable
-        vote per voter. Use :class:`convert.ApprovalToSimpleVotes` to convert
-        approval votes to a simple votes accepted by this evaluator.
+        vote per voter. Use :class:`votelib.convert.ApprovalToSimpleVotes`
+        to convert approval votes to simple votes accepted by this evaluator.
     -   *Score voting* after the votes are aggregated by a score vote
-        aggregator such as :class:`convert.ScoreToSimpleVotes`
+        aggregator such as :class:`votelib.convert.ScoreToSimpleVotes`
         (:class:`votelib.evaluate.cardinal.ScoreVoting` can be used instead).
 
     These voting systems all use this evaluator together with some vote
@@ -1151,7 +1160,7 @@ class TieBreaking:
     def __init__(self,
                  main: Evaluator,
                  tiebreaker: Selector,
-                 subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
+                 subsetter: votelib.vote.VoteSubsetter = DEFAULT_SUBSETTER,
                  ):
         self.main = main
         self.tiebreaker = tiebreaker
@@ -1167,7 +1176,7 @@ class TieBreaking:
             evaluator (and the tiebreaker, after subsetting).
         '''
         main_result = self.main.evaluate(votes, *args, **kwargs)
-        subset_conv = convert.SubsettedVotes(self.subsetter)
+        subset_conv = votelib.convert.SubsettedVotes(self.subsetter)
         if Tie.any(main_result):
             main_result = main_result.copy()
             ties = self._collect_ties(main_result)

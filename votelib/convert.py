@@ -16,12 +16,14 @@ from typing import Any, List, Tuple, Dict, FrozenSet, Union, Callable, \
                    Iterable, Collection
 from numbers import Number
 
-from . import candidate, util, vote
-from .candidate import \
+import votelib.candidate
+import votelib.util
+import votelib.vote
+from votelib.candidate import \
     Candidate, Constituency, IndividualElectionOption, ElectionParty
-from .vote import RankedVoteType, ScoreVoteType
-from .component import rankscore
-from .persist import simple_serialization
+from votelib.vote import RankedVoteType, ScoreVoteType
+from votelib.component import rankscore
+from votelib.persist import simple_serialization
 
 
 def _subtract_lowest(scores: Dict[Any, int],
@@ -141,8 +143,8 @@ class ScoreToSimpleVotes:
 
     def _get_function(self, fdef) -> Callable[[List[Number]], Number]:
         if isinstance(fdef, str):
-            if fdef in util.EXACT_AGGREGATORS:
-                return util.EXACT_AGGREGATORS[fdef]
+            if fdef in votelib.util.EXACT_AGGREGATORS:
+                return votelib.util.EXACT_AGGREGATORS[fdef]
             for namespace in self.FUNCTION_NAMESPACES:
                 if hasattr(namespace, fdef):
                     return getattr(namespace, fdef)
@@ -293,7 +295,7 @@ class RankedToPositionalVotes:
                 votes: Dict[RankedVoteType, int],
                 ) -> Dict[Candidate, Number]:
         '''Convert ranked votes to simple votes.'''
-        all_candidates = util.all_ranked_candidates(votes)
+        all_candidates = votelib.util.all_ranked_candidates(votes)
         if hasattr(self.rank_scorer, 'set_n_candidates'):
             self.rank_scorer.set_n_candidates(len(all_candidates))
         rank_scores = collections.defaultdict(list)
@@ -311,7 +313,7 @@ class RankedToPositionalVotes:
                         agg_votes[cand] += score
                 else:
                     agg_votes[positioned] += score
-        return util.descending_dict(agg_votes)
+        return votelib.util.descending_dict(agg_votes)
 
 
 @simple_serialization
@@ -333,7 +335,7 @@ class RankedToCondorcetVotes:
                 votes: Dict[RankedVoteType, int],
                 ) -> Dict[Tuple[Candidate, Candidate], int]:
         '''Convert ranked votes to counts of pairwise wins.'''
-        all_cands = util.all_ranked_candidates(votes)
+        all_cands = votelib.util.all_ranked_candidates(votes)
         counts = collections.defaultdict(int)
         for ranking, n_votes in votes.items():
             is_bulk = []
@@ -441,10 +443,10 @@ class IndividualToPartyVotes:
     :param mapper: A mapper object specifying the mapping from individuals to
         parties.
     '''
-    DEFAULT_MAPPER = candidate.IndividualToPartyMapper()
+    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
 
     def __init__(self,
-                 mapper: candidate.IndividualToPartyMapper = DEFAULT_MAPPER
+                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
                  ):
         self.mapper = mapper
 
@@ -455,7 +457,7 @@ class IndividualToPartyVotes:
         aggregated = collections.defaultdict(int)
         for cand, n in votes.items():
             party = self.mapper(cand)
-            if party is not candidate.IndividualToPartyMapper.IGNORE:
+            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
                 aggregated[party] += n
         return dict(aggregated)
 
@@ -473,10 +475,10 @@ class IndividualToPartyResult:
     :param mapper: A mapper object specifying the mapping from individuals to
         parties.
     '''
-    DEFAULT_MAPPER = candidate.IndividualToPartyMapper()
+    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
 
     def __init__(self,
-                 mapper: candidate.IndividualToPartyMapper = DEFAULT_MAPPER
+                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
                  ):
         self.mapper = mapper
 
@@ -487,7 +489,7 @@ class IndividualToPartyResult:
         aggregated = collections.defaultdict(int)
         for cand in results:
             party = self.mapper(cand)
-            if party is not candidate.IndividualToPartyMapper.IGNORE:
+            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
                 aggregated[party] += 1
         return dict(aggregated)
 
@@ -505,10 +507,10 @@ class GroupVotesByParty:
         parties.
     '''
 
-    DEFAULT_MAPPER = candidate.IndividualToPartyMapper()
+    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
 
     def __init__(self,
-                 mapper: candidate.IndividualToPartyMapper = DEFAULT_MAPPER
+                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
                  ):
         self.mapper = mapper
 
@@ -519,7 +521,7 @@ class GroupVotesByParty:
         aggregated = {}
         for cand, n in votes.items():
             party = self.mapper(cand)
-            if party is not candidate.IndividualToPartyMapper.IGNORE:
+            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
                 aggregated.setdefault(party, {})[cand] = n
         return aggregated
 
@@ -608,7 +610,7 @@ class MergedDistributions:
             elected = elected.values()
         merged = {}
         for cdict in elected:
-            util.add_dict_to_dict(merged, cdict)
+            votelib.util.add_dict_to_dict(merged, cdict)
         return merged
 
 
@@ -630,7 +632,7 @@ class VoteTotals:
         '''
         all_districts = {}
         for dvotes in votes.values():
-            util.add_dict_to_dict(all_districts, dvotes)
+            votelib.util.add_dict_to_dict(all_districts, dvotes)
         return all_districts
 
 
@@ -715,7 +717,7 @@ class InvalidVoteEliminator:
     :param validator: The vote validator to use. Look for some in the
         :mod:`vote` module.
     '''
-    def __init__(self, validator: vote.VoteValidator):
+    def __init__(self, validator: votelib.vote.VoteValidator):
         self.validator = validator
 
     def convert(self, votes: Dict[Any, int]) -> Dict[Any, int]:
@@ -727,7 +729,7 @@ class InvalidVoteEliminator:
         for one_vote in votes.keys():
             try:
                 self.validator.validate(one_vote)
-            except vote.VoteError:
+            except votelib.vote.VoteError:
                 to_remove.append(one_vote)
         if to_remove:
             votes = votes.copy()
@@ -805,8 +807,10 @@ class SubsettedVotes:
         (key) into a vote object that only concerns the specified candidates,
         with other candidates removed.
     '''
+    DEFAULT_SUBSETTER = votelib.vote.SimpleSubsetter()
+
     def __init__(self,
-                 vote_subsetter: vote.VoteSubsetter = vote.SimpleSubsetter(),
+                 vote_subsetter: votelib.vote.VoteSubsetter = DEFAULT_SUBSETTER,
                  depth: int = 0,
                  ):
         self.vote_subsetter = vote_subsetter

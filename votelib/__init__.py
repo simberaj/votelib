@@ -22,8 +22,8 @@ in the :mod:`evaluate` subpackage. The :class:`VotingSystem` object can then
 wrap it into a formalized and named election system.
 '''
 
-from . import evaluate
-from .persist import simple_serialization    # noqa: F401
+import votelib.evaluate
+from votelib.persist import simple_serialization    # noqa: F401
 
 
 @simple_serialization
@@ -36,7 +36,7 @@ class VotingSystem:
         the validator and nominator by machinery in the :mod:`evaluate`
         subpackage.
     '''
-    def __init__(self, name: str, evaluator: evaluate.Evaluator):
+    def __init__(self, name: str, evaluator: votelib.evaluate.Evaluator):
         self.name = name
         self.evaluator = evaluator
 

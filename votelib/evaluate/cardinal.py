@@ -12,10 +12,12 @@ from fractions import Fraction
 from typing import Any, List, Dict, Union, Callable
 from numbers import Number
 
-from . import core, condorcet
-from .. import convert, persist
-from ..candidate import Candidate
-from ..vote import ScoreVoteType
+import votelib.convert
+import votelib.persist
+import votelib.evaluate.core
+import votelib.evaluate.condorcet
+from votelib.candidate import Candidate
+from votelib.vote import ScoreVoteType
 
 
 class ScoreVoting:
@@ -24,9 +26,10 @@ class ScoreVoting:
     With the aggregation function set to sum, it also evaluates cumulative
     voting systems.
 
-    This is essentially just a :class:`convert.ScoreToSimpleVotes` (to which
-    all parameters are passed to) followed by a :class:`core.Plurality`
-    evaluator that selects the highest aggregate score.
+    This is essentially just a :class:`votelib.convert.ScoreToSimpleVotes`
+    (to which all parameters are passed to) followed by a
+    :class:`votelib.evaluate.core.Plurality` evaluator that selects the highest
+    aggregate score.
     '''
     def __init__(self,
                  function: Union[
@@ -39,7 +42,7 @@ class ScoreVoting:
                  truncation: Number = 0,
                  bottom_value: Number = 0,
                  ):
-        self._agg = convert.ScoreToSimpleVotes(
+        self._agg = votelib.convert.ScoreToSimpleVotes(
             function=function,
             unscored_value=unscored_value,
             min_count=min_count,
@@ -50,7 +53,7 @@ class ScoreVoting:
     def to_dict(self) -> Dict[str, Any]:
         return {
             **self._agg.to_dict(),
-            'class': persist.scoped_class_name(self)
+            'class': votelib.persist.scoped_class_name(self)
         }
 
     def evaluate(self,
@@ -62,14 +65,17 @@ class ScoreVoting:
         :param votes: Score votes.
         :param n_seats: Number of candidates to select.
         '''
-        return core.get_n_best(self._agg.convert(votes), n_seats)
+        return votelib.evaluate.core.get_n_best(
+            self._agg.convert(votes),
+            n_seats
+        )
 
 
 class MajorityJudgment:
     '''Majority Judgment, a median-based cardinal voting system.
 
     Parameters other than tie_breaking are passed to
-    :class:`convert.ScoreToSimpleVotes`.
+    :class:`votelib.convert.ScoreToSimpleVotes`.
 
     Note: This evaluator does not return elected candidates in order of
     precedence (it does not resolve their exact ordering).
@@ -109,7 +115,7 @@ class MajorityJudgment:
                  truncation: Number = 0,
                  bottom_value: Number = 0,
                  ):
-        self._agg = convert.ScoreToSimpleVotes(
+        self._agg = votelib.convert.ScoreToSimpleVotes(
             function='median_low',
             unscored_value=unscored_value,
             min_count=min_count,
@@ -121,7 +127,7 @@ class MajorityJudgment:
 
     def to_dict(self) -> Dict[str, Any]:
         out = {
-            'class': persist.scoped_class_name(self),
+            'class': votelib.persist.scoped_class_name(self),
             'tie_breaking': self.tie_breaking,
         }
         for key, val in self._agg.to_dict().items():
@@ -139,8 +145,11 @@ class MajorityJudgment:
         :param n_seats: Number of candidates to select.
         '''
         corrected_scores = self._agg.corrected_scores(votes)
-        order = core.get_n_best(self._agg.aggregate(corrected_scores), n_seats)
-        if isinstance(order[-1], core.Tie):
+        order = votelib.evaluate.core.get_n_best(
+            self._agg.aggregate(corrected_scores),
+            n_seats
+        )
+        if isinstance(order[-1], votelib.evaluate.core.Tie):
             n_tied_seats = order.count(order[-1])
             return order[:-n_tied_seats] + self.tie_breaker({
                 cand: corrected_scores[cand] for cand in order[-1]
@@ -161,9 +170,9 @@ class MajorityJudgment:
         scores = {cand: cscores.copy() for cand, cscores in scores.items()}
         while max(sum(cscores.values()) for cscores in scores.values()):
             medians = self._agg.aggregate(scores)
-            best = core.get_n_best(medians, n_seats)
+            best = votelib.evaluate.core.get_n_best(medians, n_seats)
             for i, result in enumerate(best):
-                if isinstance(result, core.Tie):
+                if isinstance(result, votelib.evaluate.core.Tie):
                     if i > 0:
                         winners = best[:i]
                         return winners + self._tiebreak_default({
@@ -179,7 +188,9 @@ class MajorityJudgment:
                 closest_change = 1
             for cand, cscores in scores.items():
                 cscores[medians[cand]] -= closest_change
-        raise core.VotingSystemError('cannot determine clear cutoff')
+        raise votelib.evaluate.core.VotingSystemError(
+            'cannot determine clear cutoff'
+        )
 
     @staticmethod
     def _closest_median_change(scores: Dict[Candidate, Dict[Any, int]],
@@ -217,7 +228,7 @@ class MajorityJudgment:
         majorities = self._counts_over_score(
             scores, self._shared_median(scores), strict=False
         )
-        return core.get_n_best(majorities, n_seats)
+        return votelib.evaluate.core.get_n_best(majorities, n_seats)
 
     def _shared_median(self,
                        scores: Dict[Candidate, Dict[Number, int]]
@@ -265,8 +276,9 @@ class STAR:
         (added to the number of seats to be filled) as a fraction of the number
         of seats to be filled.
     :param runoff_evaluator: Name of the Condorcet evaluator to use for the
-        run-off (references `condorcet.EVALUATORS`), or an instance of such a
-        selector (must accept votes in pairwise win format).
+        run-off (references `votelib.evaluate.condorcet.EVALUATORS`),
+        or an instance of such a selector (must accept votes in pairwise win
+        format).
     :param unscored_value: Score to give to a candidate that was not assigned
         a score by the voter. None means such ballots will not be considered
         for the candidate. A callable is not accepted.
@@ -284,32 +296,37 @@ class STAR:
     def __init__(self,
                  runoff_added_count: int = 1,
                  runoff_added_fraction: Number = 0,
-                 runoff_evaluator: Union[str, condorcet.Selector] = 'schulze',
+                 runoff_evaluator: Union[
+                     str,
+                     votelib.evaluate.condorcet.Selector
+                 ] = 'schulze',
                  unscored_value: Union[str, Number, None] = None,
                  min_count: int = 0,
                  truncation: Number = 0,
                  bottom_value: Number = 0,
                  ):
         if isinstance(runoff_evaluator, str):
-            runoff_evaluator = condorcet.EVALUATORS[runoff_evaluator]
-        self._agg = convert.ScoreToSimpleVotes(
+            runoff_evaluator = votelib.evaluate.condorcet.EVALUATORS[
+                runoff_evaluator
+            ]
+        self._agg = votelib.convert.ScoreToSimpleVotes(
             function='sum',
             unscored_value=unscored_value,
             min_count=min_count,
             truncation=truncation,
             bottom_value=bottom_value,
         )
-        self._runoff_torank_conv = convert.ScoreToRankedVotes(
+        self._runoff_torank_conv = votelib.convert.ScoreToRankedVotes(
             unscored_value=unscored_value
         )
-        self._runoff_tocond_conv = convert.RankedToCondorcetVotes()
+        self._runoff_tocond_conv = votelib.convert.RankedToCondorcetVotes()
         self.runoff_added_count = runoff_added_count
         self.runoff_added_fraction = runoff_added_fraction
         self.runoff_evaluator = runoff_evaluator
 
     def to_dict(self) -> Dict[str, Any]:
         out = {
-            'class': persist.scoped_class_name(self),
+            'class': votelib.persist.scoped_class_name(self),
             'runoff_added_count': self.runoff_added_count,
             'runoff_added_fraction': self.runoff_added_fraction,
             'runoff_evaluator': self.runoff_evaluator.to_dict(),
@@ -334,7 +351,9 @@ class STAR:
             n_seats + self.runoff_added_count
             + int(math.ceil(self.runoff_added_fraction * n_seats))
         )
-        runoff_members = core.get_n_best(agg_scores, runoff_size)
+        runoff_members = votelib.evaluate.core.get_n_best(
+            agg_scores, runoff_size
+        )
         # Convert scores to pairwise wins for the runoff.
         pairwin_votes = {
             pair: n_votes

@@ -26,7 +26,7 @@ import abc
 import collections
 from typing import Any, List, Optional, Union
 
-from .persist import simple_serialization
+from votelib.persist import simple_serialization
 
 
 class CandidateError(Exception):

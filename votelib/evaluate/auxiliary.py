@@ -17,9 +17,9 @@ from typing import Any, List, Dict, Collection, Optional, Union
 from numbers import Number
 from decimal import Decimal
 
-from ..candidate import Candidate
-from ..persist import simple_serialization
-from .. import util
+from votelib.candidate import Candidate
+from votelib.persist import simple_serialization
+import votelib.util
 
 
 """
@@ -61,7 +61,7 @@ class RandomUnrankedBallotSelector:
         :param n_seats: Number of candidates (ballots) to be selected.
         '''
         random.seed(self.seed)
-        return util.select_n_random(votes, n_seats)
+        return votelib.util.select_n_random(votes, n_seats)
 
 
 @simple_serialization
@@ -90,8 +90,8 @@ class Sortitor:
         :param n_seats: Number of candidates to be selected.
         '''
         random.seed(self.seed)
-        return util.select_n_random({
-            cand: 1 for cand, n_votes in util.sorted_votes(votes)
+        return votelib.util.select_n_random({
+            cand: 1 for cand, n_votes in votelib.util.sorted_votes(votes)
         }, n_seats)
 
 

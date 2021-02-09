@@ -13,10 +13,10 @@ from fractions import Fraction
 from numbers import Number
 from typing import List, FrozenSet, Dict, Union, Callable
 
-from ..candidate import Candidate
-from ..persist import simple_serialization
-from . import core
-from ..component import quota
+import votelib.evaluate.core
+import votelib.component.quota
+from votelib.candidate import Candidate
+from votelib.persist import simple_serialization
 
 
 @simple_serialization
@@ -83,7 +83,9 @@ class ProportionalApproval:
             cand: -self._satisfaction(alternative - {cand}, votes)
             for cand in alternative
         }
-        return core.get_n_best(satisfaction_drops, len(alternative))
+        return votelib.evaluate.core.get_n_best(
+            satisfaction_drops, len(alternative)
+        )
 
     def _get_best_alternatives(self,
                                votes: Dict[FrozenSet[Candidate], int],
@@ -155,11 +157,11 @@ class SequentialProportionalApproval:
                     )
             for cand in elected:
                 del round_votes[cand]
-            choice = core.get_n_best(round_votes, 1)
+            choice = votelib.evaluate.core.get_n_best(round_votes, 1)
             if not choice:
                 return elected
             best = choice[0]
-            if isinstance(best, core.Tie):
+            if isinstance(best, votelib.evaluate.core.Tie):
                 raise NotImplementedError('tie breaking in SPAV')
             else:
                 elected.append(best)
@@ -194,7 +196,8 @@ class QuotaSelector:
     :param on_more_over_quota: How to handle the case when more candidates
         fulfill the quota that there is seats:
 
-        -   ``'error'``: raise a :class:`core.VotingSystemError`,
+        -   ``'error'``: raise a
+            :class:`votelib.evaluate.core.VotingSystemError`,
         -   ``'select'``: select the candidates with the most votes (possibly
             producing ties when they are equal).
     '''
@@ -205,7 +208,7 @@ class QuotaSelector:
                  accept_equal: bool = True,
                  on_more_over_quota: str = 'error',
                  ):
-        self.quota_function = quota.construct(quota_function)
+        self.quota_function = votelib.component.quota.construct(quota_function)
         self.accept_equal = accept_equal
         self.on_more_over_quota = on_more_over_quota
 
@@ -225,11 +228,11 @@ class QuotaSelector:
                 unselected.add(cand)
         if len(over_quota) > n_seats:
             if self.on_more_over_quota == 'error':
-                raise core.VotingSystemError(
+                raise votelib.evaluate.core.VotingSystemError(
                     f'wanted {n_seats}, quota gave {len(over_quota)}'
                 )
             elif self.on_more_over_quota != 'select':
                 raise ValueError(
                     f'invalid more_over_quota setting: {self.more_over_quota}'
                 )
-        return core.get_n_best(over_quota, n_seats)
+        return votelib.evaluate.core.get_n_best(over_quota, n_seats)

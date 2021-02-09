@@ -6,19 +6,20 @@ These are used in some Condorcet methods to determine ranking priority.
 from typing import Callable, Dict, Tuple
 from numbers import Number
 
-from . import core
-from ..vote import Candidate
+import votelib.component.core
+from votelib.vote import Candidate
 
 
 PAIRWIN_SCORERS = {}
 
 
-pairwin_scorer_mark, get, construct = core.register_functions(
-    PAIRWIN_SCORERS, 'pairwise win scorer', Callable[
-        [Dict[Tuple[Candidate, Candidate], Number]],
-        Dict[Tuple[Candidate, Candidate], Number]
-    ]
-)
+pairwin_scorer_mark, get, construct = \
+    votelib.component.core.register_functions(
+        PAIRWIN_SCORERS, 'pairwise win scorer', Callable[
+            [Dict[Tuple[Candidate, Candidate], Number]],
+            Dict[Tuple[Candidate, Candidate], Number]
+        ]
+    )
 
 
 @pairwin_scorer_mark

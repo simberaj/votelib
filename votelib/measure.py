@@ -23,7 +23,7 @@ import math
 from typing import Dict, Tuple
 from numbers import Number
 
-from .candidate import Candidate
+from votelib.candidate import Candidate
 
 
 def gallagher(votes: Dict[Candidate, Number],
