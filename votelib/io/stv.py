@@ -191,3 +191,14 @@ def _ordinal_candidate_nicks(cand_names: Collection[Candidate]) -> Dict[Candidat
             cand_i //= 26
         nicks[cand] = ''.join(nick_letters)
     return nicks
+
+
+def load_lines(lines: Iterable[str],
+               ) -> Tuple[
+                   Dict[Tuple[Candidate, ...], Number],
+                   Optional[votelib.VotingSystem]
+               ]:
+    raise NotImplementedError
+
+
+load, loads = votelib.io.core.loaders(load_lines)
