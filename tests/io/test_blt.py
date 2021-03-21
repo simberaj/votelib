@@ -2,7 +2,6 @@
 import sys
 import os
 import io
-import logging
 
 import pytest
 
@@ -10,9 +9,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 import votelib.io.blt
 import votelib.evaluate.sequential
 
-
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
-
 
 STV_EVAL = votelib.evaluate.sequential.TransferableVoteSelector()
 

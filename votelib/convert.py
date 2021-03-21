@@ -250,7 +250,7 @@ class ScoreToSimpleVotes:
 
 
 @simple_serialization
-class RankedToSimpleVotes:
+class RankedToFirstPreference:
     '''Aggregate ranked votes to simple votes, taking each voter's first choice.
 
     This is useful to determine the plurality winner in ranked choice voting
@@ -265,6 +265,47 @@ class RankedToSimpleVotes:
             if ranking:
                 output[ranking[0]] += n_votes
         return dict(output)
+
+
+@simple_serialization
+class RankedToPresenceCounts:
+    '''Count candidate occurrences in ranked votes regardless of rank.
+
+    Returns simple votes. The candidates will be ordered in the order of the
+    ranked votes - first, all candidates appearing on any first rank will be
+    listed in the order of their first such votes, then all candidates
+    that appear on second and lower ranks only, etc.
+    '''
+    def convert(self,
+                votes: Dict[RankedVoteType, Number],
+                ) -> Dict[Candidate, Number]:
+        '''Convert ranked votes to simple votes, disregarding rank.'''
+        output = collections.defaultdict(int)
+        for cand, rank_i, n_votes in votelib.util.all_rankings(votes):
+            output[cand] += votes
+        return dict(output)
+
+
+@simple_serialization
+class RankedToApprovalVotes:
+    '''Convert ranked votes to approval votes (disregarding rank).
+
+    Returns approval (set) votes by lumping together all candidates ranked on
+    a particular ballot regardless of rank.
+    '''
+    def convert(self,
+                votes: Dict[RankedVoteType, Number],
+                ) -> Dict[FrozenSet[Candidate], Number]:
+        approval = {}
+        for ranking, n_votes in votes.items():
+            vote_cands = set()
+            for positioned in ranking:
+                if isinstance(positioned, collections.abc.Set):
+                    vote_cands.update(positioned)
+                else:
+                    vote_cands.add(positioned)
+            approval[frozenset(vote_cands)] = n_votes
+        return approval
 
 
 @simple_serialization
@@ -294,7 +335,7 @@ class RankedToPositionalVotes:
     def convert(self,
                 votes: Dict[RankedVoteType, int],
                 ) -> Dict[Candidate, Number]:
-        '''Convert ranked votes to simple votes.'''
+        '''Convert ranked votes to simple votes by scoring their positions.'''
         all_candidates = votelib.util.all_ranked_candidates(votes)
         if hasattr(self.rank_scorer, 'set_n_candidates'):
             self.rank_scorer.set_n_candidates(len(all_candidates))
@@ -335,7 +376,7 @@ class RankedToCondorcetVotes:
                 votes: Dict[RankedVoteType, int],
                 ) -> Dict[Tuple[Candidate, Candidate], int]:
         '''Convert ranked votes to counts of pairwise wins.'''
-        all_cands = votelib.util.all_ranked_candidates(votes)
+        all_cands = frozenset(votelib.util.all_ranked_candidates(votes))
         counts = collections.defaultdict(int)
         for ranking, n_votes in votes.items():
             is_bulk = []
@@ -846,3 +887,10 @@ class SubsettedVotes:
                 nester: self._convert(nested, subset, depth - 1)
                 for nester, nested in votes.items()
             }
+
+
+RANKED_TO_SIMPLE: List[type] = [
+    RankedToPositionalVotes,
+    RankedToFirstPreference,
+    RankedToPresenceCounts,
+]

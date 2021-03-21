@@ -27,7 +27,7 @@ BURL_2009_VOTES = {
 
 def test_burl_2009_plurality():
     fptp = votelib.evaluate.core.PreConverted(
-        votelib.convert.RankedToSimpleVotes(),
+        votelib.convert.RankedToFirstPreference(),
         votelib.evaluate.Plurality()
     )
     assert fptp.evaluate(BURL_2009_VOTES, 1) == ['Wright']

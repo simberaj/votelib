@@ -1,9 +1,11 @@
 
 from decimal import Decimal
 from numbers import Number
-from typing import List, Dict, Tuple, Set, Iterable, Optional, TextIO
+from typing import List, Dict, Tuple, Set, Iterable, Optional
 
 import votelib.candidate
+import votelib.util
+import votelib.io.core
 from votelib.candidate import Candidate
 
 
@@ -15,39 +17,17 @@ BLTSpecContents = Tuple[
 ]
 
 
-def load(blt_file: TextIO, **kwargs) -> BLTSpecContents:
-    return _load(blt_file, **kwargs)
+class NotSupportedInBLT(votelib.io.core.NotSupportedInFormat):
+    FORMAT = 'BLT file'
 
 
-def loads(blt_text: str, **kwargs) -> BLTSpecContents:
-    return _load(iter(blt_text.split('\n')), **kwargs)
-
-
-def dump(blt_file: TextIO,
-         votes: Dict[Tuple[Candidate, ...], Number],
-         n_seats: int,
-         candidates: Optional[List[Candidate]] = None,
-         election_name: Optional[str] = None,
-         **kwargs) -> None:
-    for line in _dump(votes, n_seats, candidates, election_name):
-        blt_file.write(line + '\n')
-
-
-def dumps(votes: Dict[Tuple[Candidate, ...], Number],
-          n_seats: int,
-          candidates: Optional[List[Candidate]] = None,
-          election_name: Optional[str] = None,
-          **kwargs) -> None:
-    return '\n'.join(_dump(votes, n_seats, candidates, election_name))
-
-
-def _dump(votes: Dict[Tuple[Candidate, ...], Number],
-          n_seats: int,
-          candidates: Optional[List[Candidate]] = None,
-          election_name: Optional[str] = None,
-          ) -> Iterable[str]:
+def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
+               n_seats: int,
+               candidates: Optional[List[Candidate]] = None,
+               election_name: Optional[str] = None,
+               ) -> Iterable[str]:
     if candidates is None:
-        candidates = _gather_candidates(votes)
+        candidates = votelib.util.all_ranked_candidates(votes)
     yield _dump_numline([len(candidates), n_seats])
     for i in _get_withdrawn_inds(candidates):
         yield _dump_numline([-(i+i)])
@@ -65,14 +45,7 @@ def _dump(votes: Dict[Tuple[Candidate, ...], Number],
         yield _dump_strline(election_name)
 
 
-def _gather_candidates(votes: Dict[Tuple[Candidate, ...], Number]
-                       ) -> List[Candidate]:
-    cands = []
-    for prefs in votes:
-        for cand in prefs:
-            if cand not in cands:
-                cands.append(cand)
-    return cands
+dump, dumps = votelib.io.core.dumpers(dump_lines)
 
 
 def _get_withdrawn_inds(candidates: List[Candidate]) -> List[int]:
@@ -86,7 +59,12 @@ def _dump_vote(vote: Tuple[Candidate, ...],
                candidates: List[Candidate],
                n_votes: Number,
                ) -> List[Number]:
-    return [n_votes] + [candidates.index(cand) + 1 for cand in vote] + [0]
+    try:
+        cand_indices = [candidates.index(cand) + 1 for cand in vote]
+    except ValueError:
+        raise NotSupportedInBLT(f'equal rankings: {vote}')
+    else:
+        return [n_votes] + cand_indices + [0]
 
 
 def _dump_numline(nums: List[Number]) -> str:
@@ -97,9 +75,9 @@ def _dump_strline(string: str) -> str:
     return f'"{string}"'
 
 
-def _load(blt_lines: Iterable[str],
-          oneplus_weights: bool = False,
-          ) -> BLTSpecContents:
+def load_lines(blt_lines: Iterable[str],
+               oneplus_weights: bool = False,
+               ) -> BLTSpecContents:
     try:
         n_cands, n_seats = _parse_header(next(blt_lines))
     except StopIteration as e:
@@ -119,6 +97,9 @@ def _load(blt_lines: Iterable[str],
         candidates,
         election_name,
     )
+
+
+load, loads = votelib.io.core.loaders(load_lines)
 
 
 def _numeric_candidates(n_cands: int) -> List[str]:
