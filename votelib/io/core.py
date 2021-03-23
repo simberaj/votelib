@@ -15,6 +15,11 @@ class NotSupportedInFormat(Exception):
         super().__init__(f'{what} not supported by {self.FORMAT}')
 
 
+class ParseError(Exception):
+    """An input that is invalid according to the given format was detected."""
+    pass
+
+
 def loaders(line_loader: Callable[..., FilePayload]
             ) -> Tuple[Callable[..., FilePayload], Callable[..., FilePayload]]:
     """Create load() and loads() functions from a function accepting an iterable of lines."""

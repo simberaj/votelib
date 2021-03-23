@@ -32,6 +32,10 @@ class NotSupportedInSTV(votelib.io.core.NotSupportedInFormat):
     FORMAT = 'STV file'
 
 
+class STVParseError(votelib.io.core.ParseError):
+    pass
+
+
 def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
                system: Union[votelib.VotingSystem, votelib.evaluate.Evaluator, None] = None,
                candidates: Optional[List[Candidate]] = None,
@@ -111,12 +115,18 @@ def _dump_tveval(evaluator: votelib.evaluate.sequential.TransferableVoteDistribu
         yield 'quota=mandatory'
 
 
+ORDER_SELECTORS = (
+    votelib.evaluate.auxiliary.InputOrderSelector,
+    votelib.evaluate.auxiliary.CandidateNumberRanker,
+)
+
+
 def _dump_tiebreaker(evaluator: votelib.evaluate.Evaluator) -> Iterable[str]:
     if isinstance(evaluator, votelib.evaluate.PreConverted):
         if type(evaluator.converter) not in votelib.convert.RANKED_TO_SIMPLE:
             raise NotSupportedInSTV(f'conversion {evaluator.converter}')
         yield from _dump_tiebreaker(evaluator.evaluator)
-    elif isinstance(evaluator, votelib.evaluate.auxiliary.InputOrderSelector):
+    elif isinstance(evaluator, ORDER_SELECTORS):
         yield 'random=non'
     elif isinstance(evaluator, votelib.evaluate.auxiliary.Sortitor):
         if evaluator.seed is not None:
@@ -193,11 +203,121 @@ def _ordinal_candidate_nicks(cand_names: Collection[Candidate]) -> Dict[Candidat
     return nicks
 
 
-def load_lines(lines: Iterable[str],
-               ) -> Tuple[
+def load_lines(lines: Iterable[str]) -> Tuple[
                    Dict[Tuple[Candidate, ...], Number],
-                   Optional[votelib.VotingSystem]
+                   Optional[votelib.VotingSystem],
+                   List[Candidate],
                ]:
+    system, candidates, nicks, n_ballots = _load_system(lines)
+    if n_ballots is None:
+        # BLT mode invoked, the rest of the file is in BLT format.
+        try:
+            votes, blt_n_seats, blt_candidates, election_name = \
+                votelib.io.blt.load_lines(lines)
+        except BLTParseError as err:
+            raise STVParseError('BLT content parsing failed') from err
+        # Replace the STV config results with the BLT data where applicable.
+        if system.name is None and election_name:
+            system.name = election_name
+        system.evaluator = votelib.evaluate.FixedSeatCount(
+            system.evaluator, blt_n_seats
+        )
+        if not candidates and blt_candidates:
+            candidates = blt_candidates
+    else:
+        votes = _load_votes(lines, nicks, n_ballots)
+    return votes, system, candidates
+
+
+def _load_system(lines: Iterable[str]) -> Tuple[
+                     Optional[votelib.VotingSystem],
+                     List[Candidate],
+                     Dict[str, Candidate],
+                     Optional[int],
+                     bool,
+                 ]:
+    syscomps = {}
+    candidates = []
+    nicks = {}
+    is_ordered = False
+    for line in lines:
+        key, value = _parse_header_line(line)
+        if key is None:
+            continue    # comment or empty line
+        elif key == 'ballots':
+            if is_ordered:
+                # reorder nicks into order= spec
+                nicks = {nick: nicks[nick] for nick in nick_orders}
+            return (
+                _create_system(**syscomps), candidates, nicks,
+                _parse_n_ballots(value), is_ordered
+            )
+        elif key == 'order':
+            nick_orders = value.split()
+        elif key in ('candidate', 'withdrawn'):
+            nick, name = value.split(None, 1)
+            cand = votelib.candidate.Person(
+                name,
+                number=len(candidates)+1,
+                withdrawn=(key == 'withdrawn'),
+            )
+            candidates.append(cand)
+            nicks[nick] = candidate
+        elif key in syscomps:
+            syscomps[key] = (syscomps[key], value)
+        else:
+            syscomps[key] = value
+    raise STVParseError('end of file before ballot data')
+
+
+def _parse_header_line(line: str) -> Tuple[str, str]:
+    if '#' in line:
+        line = line[:line.find('#')]
+    line = line.strip()
+    if not line:
+        return None, None
+    if '=' in line:
+        return line.split('=', 1)
+    else:
+        raise STVParseError(f'invalid STV header line: {line!r}')
+
+
+def _parse_n_ballots(value: str) -> Optional[int]:
+    if value == 'blt':
+        return None
+    elif value.isdigit():
+        return int(value)
+    else:
+        raise STVParseError(f'invalid ballot count: {value!r}')
+
+
+def _load_votes(lines: Iterable[str],
+                nicks: Optional[List[str]],
+                n_ballots: int,
+                ) -> Dict[Tuple[Candidate, ...], Number]:
+    raise NotImplementedError
+
+
+def _create_system(title: Optional[str] = None,
+                   method: Optional[str] = None,
+                   quota: Optional[Union[str, Tuple[str, str]]] = None,
+                   random: Optional[str] = None,
+                   ) -> votelib.VotingSystem:
+    if title is not None and not isinstance(title, str):
+        if isinstance(title, tuple):
+            raise STVParseError('duplicate election title')
+        else:
+            raise STVParseError(f'invalid election title: {title!r}')
+    return votelib.VotingSystem(
+        title,
+        _create_evaluator(method=method, quota=quota, random=random)
+    )
+
+
+def _create_evaluator(method: Optional[str] = None,
+                      quota: Optional[Union[str, Tuple[str, str]]] = None,
+                      random: Optional[str] = None,
+                      ) -> votelib.VotingSystem:
     raise NotImplementedError
 
 

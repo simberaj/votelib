@@ -151,6 +151,12 @@ class Evaluator(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
+class UnknownEvaluator(Evaluator):
+    def evaluate(self, votes, *args, **kwargs
+                 ) -> Union[List[Candidate], Dict[Candidate, int]]:
+        raise NotImplementedError
+
+
 class Selector(Evaluator):
     '''Elect a given number of candidates.
 
