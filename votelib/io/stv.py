@@ -208,7 +208,7 @@ def load_lines(lines: Iterable[str]) -> Tuple[
                    Optional[votelib.VotingSystem],
                    List[Candidate],
                ]:
-    system, candidates, nicks, n_ballots = _load_system(lines)
+    system, candidates, nicks, n_ballots, is_ordered = _load_system(lines)
     if n_ballots is None:
         # BLT mode invoked, the rest of the file is in BLT format.
         try:
@@ -225,7 +225,8 @@ def load_lines(lines: Iterable[str]) -> Tuple[
         if not candidates and blt_candidates:
             candidates = blt_candidates
     else:
-        votes = _load_votes(lines, nicks, n_ballots)
+        parser = _load_ordered_votes if is_ordered else _load_unordered_votes
+        votes = loader(_iter_vote_lines(lines, n_ballots), nicks)
     return votes, system, candidates
 
 
@@ -291,10 +292,59 @@ def _parse_n_ballots(value: str) -> Optional[int]:
         raise STVParseError(f'invalid ballot count: {value!r}')
 
 
-def _load_votes(lines: Iterable[str],
-                nicks: Optional[List[str]],
-                n_ballots: int,
-                ) -> Dict[Tuple[Candidate, ...], Number]:
+def _iter_vote_lines(lines: Iterable[str],
+                     n_ballots: int,
+                     ) -> Iterable[Tuple[Number, List[str]]]:
+    has_ended = False
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if line == 'end':
+            if i != n_ballots:
+                raise STVParseError(f'expected {n_ballots} ballots, got {i}')
+            has_ended = True
+            break
+        if not line:
+            continue
+        items = line.split()
+        if items[0].endswith('X'):
+            yield _parse_multiplier(items[0][:-1]), items[1:]
+        else:
+            yield 1, items
+    if not has_ended:
+        raise STVParseError('no "end" terminator line')
+
+
+def _parse_multiplier(mult: str) -> Number:
+    raise NotImplementedError
+
+
+def _load_ordered_votes(lines: Iterable[Tuple[Number, List[str]]],
+                        nicks: Dict[str, Candidate],
+                        ) -> Dict[Tuple[Candidate, ...], Number]:
+    votes = collections.defaultdict(int)
+    candidates = list(nicks.values())
+    for line_i, line_cont in enumerate(lines):
+        mult, items = line_cont
+        cand_order = []
+        for item_i, item in enumerate(items):
+            if item.isdigit():
+                cand_order.append((candidates[item_i], int(item)))
+            elif item != '-':
+                raise STVParseError(f'invalid ordered vote item: {item!r}'
+                                    f'on ballot line {line_i}')
+        cand_order.sort(key=operator.itemgetter(1))
+        vote, indices = zip(*cand_order)
+        if indices != list(range(1, len(indices)+1)):
+            raise STVParseError(f'invalid ranking indices: {indices!r}'
+                                f'on ballot line {line_i}')
+        votes[vote] += mult
+    return votes
+
+
+def _load_unordered_votes(lines: Iterable[Tuple[Number, List[str]]],
+                          nicks: Dict[str, Candidate],
+                          ) -> Dict[Tuple[Candidate, ...], Number]:
+    # for line_i, line_cont in enumerate(lines):
     raise NotImplementedError
 
 
