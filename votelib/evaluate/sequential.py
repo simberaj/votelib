@@ -13,7 +13,6 @@ from fractions import Fraction
 from typing import Any, List, Dict, Tuple, Union, Callable, Optional
 from numbers import Number
 
-
 import votelib.persist
 import votelib.util
 import votelib.component.quota

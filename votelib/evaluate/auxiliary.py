@@ -116,6 +116,26 @@ class InputOrderSelector:
 
 
 @simple_serialization
+class CandidateNumberRanker:
+    '''Select first N candidates with lowest candidate number.
+
+    This is useful for tiebreaking with an externally determined sort order.
+    '''
+    def evaluate(self,
+                 votes: Dict[Candidate, Any],
+                 n_seats: int = 1,
+                 ) -> List[Candidate]:
+        '''Select the first candidates that appear in the votes dictionary.
+
+        :param votes: Simple votes. The quantities of votes are disregarded.
+        :param n_seats: Number of candidates to be selected.
+        '''
+        return list(
+            sorted(votes.keys(), operator.attrgetter('number'))
+        )[:n_seats]
+
+
+@simple_serialization
 class RFC3797Selector:
     '''Select candidates randomly by the algorithm from RFC 3797.
 

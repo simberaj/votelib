@@ -1,6 +1,7 @@
 title=STV Voting Example 2007-05-01
 seats=3
-quota=droop
+method=BC
+quota=hare
 quota=mandatory
 random=37863
 candidate=gb George Brown

@@ -1,7 +1,7 @@
 title=Test of Choice Voting
+method=GPCA2000
 seats=3
-quota=droop
-random=37863
+random=non
 candidate=gb George Brown
 candidate=mg Mary Green
 candidate=ht Hermione Tan

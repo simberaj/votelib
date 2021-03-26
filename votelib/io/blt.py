@@ -90,7 +90,7 @@ def load_lines(blt_lines: Iterable[str],
         blt_lines,
         oneplus_weights=oneplus_weights
     )
-    candidates, election_name = _parse_strings(blt_lines)
+    candidates, election_name = _parse_strings(blt_lines, n_cands)
     if candidates is None:
         candidates = _numeric_candidates(n_cands)
     candidates = _form_candidate_objects(candidates, withdrawn)
@@ -177,7 +177,8 @@ def _parse_body(blt_lines: Iterable[str],
                         ' EOF before ballot list terminator')
 
 
-def _parse_strings(blt_lines: Iterable[str]
+def _parse_strings(blt_lines: Iterable[str],
+                   n_cands: int,
                    ) -> Tuple[Optional[List[str]], Optional[str]]:
     parsed_lines = []
     empty_encountered = False
@@ -193,10 +194,21 @@ def _parse_strings(blt_lines: Iterable[str]
             raise BLTParseError(f'invalid BLT string line: {blt_line!r}')
     if not parsed_lines:
         return None, None
-    elif len(parsed_lines) == 1:
-        return None, parsed_lines[0]
-    else:
+    if len(parsed_lines) == 1:
+        if n_cands == 1:
+            return parsed_lines[0], None
+        else:
+            return None, parsed_lines[0]
+    elif len(parsed_lines) < n_cands:
+        raise BLTParseError(f'not enough candidate names: {len(parsed_lines)}'
+                            f' given, {n_cands} set in header')
+    elif len(parsed_lines) == n_cands:
+        return parsed_lines, None
+    elif len(parsed_lines) == n_cands + 1:
         return parsed_lines[:-1], parsed_lines[-1]
+    else:
+        raise BLTParseError(f'too many strings: {len(parsed_lines)} found'
+                            f'but expecting {n_cands} candidate names + title')
 
 
 def _clean_line(blt_line: str) -> str:

@@ -25,7 +25,7 @@ def test_custom_in():
 
 
 def test_incomplete_header():
-    with pytest.raises(ValueError):
+    with pytest.raises(votelib.io.blt.BLTParseError):
         votelib.io.blt.loads('2')
 
 
@@ -82,7 +82,7 @@ def test_atwood_so_blt():
 
 
 def test_fail_empty():
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(votelib.io.blt.BLTParseError) as excinfo:
         votelib.io.blt.load(io.StringIO())
     assert 'empty' in str(excinfo.value)
 
@@ -153,7 +153,7 @@ def test_incomplete_body():
     -2
     4 2 1 3 0
     '''
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(votelib.io.blt.BLTParseError) as excinfo:
         votelib.io.blt.loads(TEST_S)
     assert 'incomplete' in str(excinfo.value)
 
@@ -163,7 +163,7 @@ def test_incomplete_row():
     4 2 1 3
     0
     '''
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(votelib.io.blt.BLTParseError) as excinfo:
         votelib.io.blt.loads(TEST_S)
     assert 'must be zero-terminated' in str(excinfo.value)
 
@@ -173,6 +173,6 @@ def test_incomplete_row():
     4 2 1 3.5 0
     0
     '''
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(votelib.io.blt.BLTParseError) as excinfo:
         votelib.io.blt.loads(TEST_S)
 

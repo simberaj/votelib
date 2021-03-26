@@ -6,9 +6,10 @@ optionally, an exact definition of an election system. [#stvlob]_
 .. [#wpav] "STV File Format".
     https://lobitos.net/voting/format.html
 """
-import collections
 import re
 import math
+import operator
+import collections
 import warnings
 from typing import List, Tuple, Dict, Union, Iterable, Optional, Collection
 from numbers import Number
@@ -96,6 +97,7 @@ def _dump_system(system: Union[votelib.VotingSystem, votelib.evaluate.Evaluator]
 def _dump_tveval(evaluator: votelib.evaluate.sequential.TransferableVoteDistributor,
                  output_method: bool = True,
                  ) -> Iterable[str]:
+    print('OM', output_method)
     if output_method:
         if evaluator.retainer is not None:
             raise NotSupportedInSTV(f'transferable vote retainer {evaluator.retainer}')
@@ -214,7 +216,7 @@ def load_lines(lines: Iterable[str]) -> Tuple[
         try:
             votes, blt_n_seats, blt_candidates, election_name = \
                 votelib.io.blt.load_lines(lines)
-        except BLTParseError as err:
+        except votelib.io.blt.BLTParseError as err:
             raise STVParseError('BLT content parsing failed') from err
         # Replace the STV config results with the BLT data where applicable.
         if system.name is None and election_name:
@@ -225,7 +227,7 @@ def load_lines(lines: Iterable[str]) -> Tuple[
         if not candidates and blt_candidates:
             candidates = blt_candidates
     else:
-        parser = _load_ordered_votes if is_ordered else _load_unordered_votes
+        loader = _load_ordered_votes if is_ordered else _load_unordered_votes
         votes = loader(_iter_vote_lines(lines, n_ballots), nicks)
     return votes, system, candidates
 
@@ -255,6 +257,7 @@ def _load_system(lines: Iterable[str]) -> Tuple[
             )
         elif key == 'order':
             nick_orders = value.split()
+            is_ordered = True
         elif key in ('candidate', 'withdrawn'):
             nick, name = value.split(None, 1)
             cand = votelib.candidate.Person(
@@ -263,7 +266,7 @@ def _load_system(lines: Iterable[str]) -> Tuple[
                 withdrawn=(key == 'withdrawn'),
             )
             candidates.append(cand)
-            nicks[nick] = candidate
+            nicks[nick] = cand
         elif key in syscomps:
             syscomps[key] = (syscomps[key], value)
         else:
@@ -328,7 +331,7 @@ def _parse_multiplier(mult: str, line_i: int) -> Number:
     parse_err = STVParseError(f'invalid vote weight multiplier: {mult!r}'
                               f'on ballot line {line_i}')
     if inner_err is not None:
-        raise parse_err from err
+        raise parse_err from inner_err
     else:
         raise parse_err
 
@@ -349,9 +352,9 @@ def _load_ordered_votes(lines: Iterable[Tuple[Number, List[str]]],
                                     f'on ballot line {line_i}')
         cand_order.sort(key=operator.itemgetter(1))
         vote, indices = zip(*cand_order)
-        if indices != list(range(1, len(indices)+1)):
+        if indices != tuple(range(1, len(indices)+1)):
             raise STVParseError(f'invalid ranking indices: {indices!r}'
-                                f'on ballot line {line_i}')
+                                f' on ballot line {line_i}')
         votes[vote] += mult
     return votes
 
@@ -368,6 +371,7 @@ def _load_unordered_votes(lines: Iterable[Tuple[Number, List[str]]],
             raise STVParseError(f'unknown candidate in ballot line {line_i}') \
                 from err
         votes[vote] += mult
+    return votes
 
 
 def _create_system(title: Optional[str] = None,
@@ -391,20 +395,43 @@ def _create_evaluator(method: Optional[str] = None,
                       seats: Optional[str] = None,
                       random: Optional[str] = None,
                       ) -> votelib.evaluate.Evaluator:
+    mandatory_quota = False
     if method == 'GPCA2000':
         method = 'BC'
         quota = ('droop', 'mandatory')
     if method == 'BC':
         transferer = 'Gregory'
-    else:
+    elif not method:
+        raise STVParseError('STV method not found')
+    elif method != 'blt':
         raise NotImplementedError(f'STV method not implemented: {method!r}')
-    raise NotImplementedError
-    
-        # evaluator = votelib.evaluate.sequential.TransferableVoteSelector(
-            
-        # )
-    # quota: numeric, droop, hare + mandatory?
-        # GPCA2000: mandatory droop quota
+    if isinstance(quota, tuple):
+        if len(quota) > 2:
+            raise STVParseError(f'too many quota settings: {quota!r}')
+        elif 'mandatory' in quota:
+            mandatory_quota = True
+            quota = tuple(item for item in quota if item != 'mandatory')[0]
+        else:
+            raise STVParseError(f'unknown quota settings: {quota!r}')
+    if quota is None:
+        if method != 'blt':
+            raise STVParseError('quota setting not found')
+        # otherwise, we will not need quota_function
+    elif quota.isdigit():
+        quota_function = votelib.component.quota.constant(int(quota))
+    else:
+        try:
+            quota_function = votelib.component.quota.get(quota)
+        except KeyError:
+            raise STVParseError(f'unknown quota type: {quota!r}')
+    if method == 'blt':
+        evaluator = votelib.evaluate.UnknownEvaluator()
+    else:
+        evaluator = votelib.evaluate.sequential.TransferableVoteSelector(
+            quota_function=quota_function,
+            transferer=transferer,
+            mandatory_quota=mandatory_quota,
+        )
     if random:
         evaluator = _add_tiebreaker(evaluator, random)
     if seats:
@@ -416,12 +443,18 @@ def _add_tiebreaker(evaluator: votelib.evaluate.Evaluator,
                     random: str,
                     ) -> votelib.evaluate.Evaluator:
     if random == 'non':
-        tiebreaker = votelib.evaluate.auxiliary.InputOrderSelector()
+        tiebreaker = votelib.evaluate.auxiliary.CandidateNumberRanker()
     elif random.isdigit():
         tiebreaker = votelib.evaluate.auxiliary.Sortitor(seed=int(random))
     else:
         raise STVParseError('invalid random= parameter: {random!r}')
-    return votelib.evaluate.TieBreaking(evaluator, tiebreaker)
+    return votelib.evaluate.TieBreaking(
+        evaluator,
+        votelib.evaluate.PreConverted(
+            votelib.convert.RankedToPresenceCounts(),
+            tiebreaker
+        )
+    )
 
 
 def _add_fixed_seats(evaluator: votelib.evaluate.Evaluator,
@@ -429,8 +462,8 @@ def _add_fixed_seats(evaluator: votelib.evaluate.Evaluator,
                      ) -> votelib.evaluate.FixedSeatCount:
     try:
         n_seats = int(seats)
-    except ValueError from err:
-        raise STVParseError(f'invalid seat count: {seats!r}')
+    except ValueError as err:
+        raise STVParseError(f'invalid seat count: {seats!r}') from err
     return votelib.evaluate.FixedSeatCount(
         evaluator, n_seats=n_seats
     )

@@ -35,12 +35,28 @@ UNORDERED_SYSTEM = votelib.VotingSystem(
     votelib.evaluate.FixedSeatCount(
         votelib.evaluate.TieBreaking(
             votelib.evaluate.sequential.TransferableVoteSelector(
-                quota_function='droop',
+                quota_function='hare',
                 mandatory_quota=True,
             ),
             votelib.evaluate.PreConverted(
                 votelib.convert.RankedToPresenceCounts(),
                 votelib.evaluate.auxiliary.Sortitor(37863),
+            )
+        ),
+        3
+    )
+)
+ORDERED_SYSTEM = votelib.VotingSystem(
+    'Test of Choice Voting',
+    votelib.evaluate.FixedSeatCount(
+        votelib.evaluate.TieBreaking(
+            votelib.evaluate.sequential.TransferableVoteSelector(
+                quota_function='droop',
+                mandatory_quota=True,
+            ),
+            votelib.evaluate.PreConverted(
+                votelib.convert.RankedToPresenceCounts(),
+                votelib.evaluate.auxiliary.CandidateNumberRanker(),
             )
         ),
         3
@@ -62,10 +78,17 @@ UNORDERED_VOTES = {
     ('Hermione Tan', 'Violet Smith'): 1,
     ('Hermione Tan', 'Able Body', 'George Brown', 'Harvey Black'): 1,
 }
-UNORDERED_CANDIDATES = [
+EXAMPLE_CANDIDATES = [
     'George Brown', 'Mary Green', 'Hermione Tan', 'Harvey Black',
     'Violet Smith', 'Able Body'
 ]
+ORDERED_VOTES = {
+    ('George Brown', 'Hermione Tan', 'Harvey Black'): 2,
+    ('Hermione Tan', 'Harvey Black'): 1,
+}
+BLT_RESULT = 'method=blt\nballots=blt\n3 2\n2 1 2 3 0\n1 2 3 1 0\n0\n"A"\n"B"\n"C"\n'
+BLT_VOTES = {tuple('ABC'): 2, tuple('BCA'): 1}
+BLT_N_SEATS = 2
 
 
 def file_fixture(name: str, filename: str):
@@ -80,6 +103,8 @@ def file_fixture(name: str, filename: str):
 custom_standard_result = file_fixture('custom_standard_result', 'custom.stv')
 custom_blt_result = file_fixture('custom_blt_result', 'custom_blt.stv')
 unordered_out_result = file_fixture('unordered_out_result', 'unordered_out.stv')
+unordered_result = file_fixture('unordered_out_result', 'unordered.stv')
+ordered_result = file_fixture('unordered_out_result', 'ordered.stv')
 
 
 def test_out_custom_system(custom_standard_result):
@@ -94,8 +119,7 @@ def test_out_unordered(unordered_out_result):
     assert votelib.io.stv.dumps(
         UNORDERED_VOTES,
         UNORDERED_SYSTEM,
-        candidates=UNORDERED_CANDIDATES,
-        output_method=False,
+        candidates=EXAMPLE_CANDIDATES,
     ) == unordered_out_result
 
 
@@ -122,7 +146,7 @@ def test_warn_distributor():
         )
 
 
-def test_error_nonunit_step():
+def test_out_error_nonunit_step():
     with pytest.raises(votelib.io.stv.NotSupportedInSTV):
         votelib.io.stv.dumps(
             CUSTOM_VOTES,
@@ -132,7 +156,7 @@ def test_error_nonunit_step():
         )
 
 
-def test_error_bad_quota():
+def test_out_error_bad_quota():
     with pytest.raises(votelib.io.stv.NotSupportedInSTV):
         votelib.io.stv.dumps(
             CUSTOM_VOTES,
@@ -140,3 +164,81 @@ def test_error_bad_quota():
                 quota_function='hagenbach_bischoff',
             ),
         )
+
+def test_out_error_equal_ranking():
+    with pytest.raises(votelib.io.stv.NotSupportedInSTV):
+        votelib.io.stv.dumps(
+            {(frozenset('AB'), 'C'): 1},
+            votelib.evaluate.sequential.TransferableVoteSelector(),
+        )
+
+def test_out_blt():
+    assert votelib.io.stv.dumps(BLT_VOTES, n_seats=BLT_N_SEATS) == BLT_RESULT
+
+def test_in_blt():
+    votes, system, candidates = votelib.io.stv.loads(BLT_RESULT)
+    check_votes_equal(votes, BLT_VOTES)
+    check_candidates_equal(candidates, list('ABC'))
+    assert system.evaluator.n_seats == BLT_N_SEATS
+
+
+def test_in_unordered(unordered_result):
+    votes, system, candidates = votelib.io.stv.loads(unordered_result)
+    check_votes_equal(votes, UNORDERED_VOTES)
+    check_candidates_equal(candidates, EXAMPLE_CANDIDATES)
+    # compare systems (via internal components)
+    assert isinstance(system, type(UNORDERED_SYSTEM))
+    assert system.name == UNORDERED_SYSTEM.name
+    assert isinstance(system.evaluator, type(UNORDERED_SYSTEM.evaluator))
+    assert system.evaluator.n_seats == UNORDERED_SYSTEM.evaluator.n_seats
+    assert isinstance(system.evaluator.evaluator, type(UNORDERED_SYSTEM.evaluator.evaluator))
+    assert isinstance(system.evaluator.evaluator.main, type(UNORDERED_SYSTEM.evaluator.evaluator.main))
+    assert system.evaluator.evaluator.main._inner.quota_function == UNORDERED_SYSTEM.evaluator.evaluator.main._inner.quota_function
+    assert system.evaluator.evaluator.main._inner.mandatory_quota == UNORDERED_SYSTEM.evaluator.evaluator.main._inner.mandatory_quota
+    assert isinstance(system.evaluator.evaluator.tiebreaker, type(UNORDERED_SYSTEM.evaluator.evaluator.tiebreaker))
+    assert isinstance(system.evaluator.evaluator.tiebreaker.evaluator, type(UNORDERED_SYSTEM.evaluator.evaluator.tiebreaker.evaluator))
+    assert system.evaluator.evaluator.tiebreaker.evaluator.seed == UNORDERED_SYSTEM.evaluator.evaluator.tiebreaker.evaluator.seed
+
+
+def test_in_ordered(ordered_result):
+    votes, system, candidates = votelib.io.stv.loads(ordered_result)
+    check_votes_equal(votes, ORDERED_VOTES)
+    check_candidates_equal(candidates, EXAMPLE_CANDIDATES)
+    # compare systems (via internal components)
+    assert isinstance(system, type(ORDERED_SYSTEM))
+    assert system.name == ORDERED_SYSTEM.name
+    assert isinstance(system.evaluator, type(ORDERED_SYSTEM.evaluator))
+    assert system.evaluator.n_seats == ORDERED_SYSTEM.evaluator.n_seats
+    assert isinstance(system.evaluator.evaluator, type(ORDERED_SYSTEM.evaluator.evaluator))
+    assert isinstance(system.evaluator.evaluator.main, type(ORDERED_SYSTEM.evaluator.evaluator.main))
+    assert system.evaluator.evaluator.main._inner.quota_function == ORDERED_SYSTEM.evaluator.evaluator.main._inner.quota_function
+    assert system.evaluator.evaluator.main._inner.mandatory_quota == ORDERED_SYSTEM.evaluator.evaluator.main._inner.mandatory_quota
+    assert isinstance(system.evaluator.evaluator.tiebreaker, type(ORDERED_SYSTEM.evaluator.evaluator.tiebreaker))
+    assert isinstance(system.evaluator.evaluator.tiebreaker.evaluator, type(ORDERED_SYSTEM.evaluator.evaluator.tiebreaker.evaluator))
+
+
+def test_in_unordered_roundtrip(unordered_out_result):
+    assert votelib.io.stv.dumps(*votelib.io.stv.loads(unordered_out_result)) == unordered_out_result
+
+
+def check_votes_equal(tested, expected):
+    # strip numbers to compare to candidate names
+    assert {
+        tuple(c.name for c in vote): n_votes
+        for vote, n_votes in tested.items()
+    } == expected
+
+
+def check_candidates_equal(tested, expected):
+    # strip numbers to compare to candidate names
+    assert [c.name for c in tested] == expected
+
+
+def test_in_incomplete():
+    with pytest.raises(votelib.io.stv.STVParseError):
+        votelib.io.stv.loads('method=BC\nquota=hare')
+
+def test_in_bad_header():
+    with pytest.raises(votelib.io.stv.STVParseError):
+        votelib.io.stv.loads('method=BC\nsomething very stupid\nseats=2')
+
