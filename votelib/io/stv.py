@@ -9,6 +9,8 @@ optionally, an exact definition of an election system. [#stvlob]_
 import re
 import math
 import operator
+import fractions
+import decimal
 import collections
 import warnings
 from typing import List, Tuple, Dict, Union, Iterable, Optional, Collection
@@ -19,11 +21,13 @@ import votelib.convert
 import votelib.evaluate
 import votelib.evaluate.auxiliary
 import votelib.evaluate.sequential
-import votelib.component.transfer
 import votelib.io.blt
 import votelib.io.core
 import votelib.util
+import votelib.component.transfer as transfer
 from votelib.candidate import Candidate
+from votelib.evaluate.sequential import \
+    TransferableVoteSelector, TransferableVoteDistributor
 
 
 SUPPORTED_QUOTAS: List[str] = ['droop', 'hare']
@@ -38,7 +42,11 @@ class STVParseError(votelib.io.core.ParseError):
 
 
 def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
-               system: Union[votelib.VotingSystem, votelib.evaluate.Evaluator, None] = None,
+               system: Union[
+                   votelib.VotingSystem,
+                   votelib.evaluate.Evaluator,
+                   None
+               ] = None,
                candidates: Optional[List[Candidate]] = None,
                n_seats: Optional[int] = None,
                output_method: bool = True,
@@ -69,13 +77,18 @@ def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
     else:
         yield 'method=blt'
         yield 'ballots=blt'
-        yield from votelib.io.blt.dump_lines(votes, n_seats, candidates=candidates)
+        yield from votelib.io.blt.dump_lines(
+            votes, n_seats, candidates=candidates
+        )
 
 
 dump, dumps = votelib.io.core.dumpers(dump_lines)
 
 
-def _dump_system(system: Union[votelib.VotingSystem, votelib.evaluate.Evaluator],
+def _dump_system(system: Union[
+                     votelib.VotingSystem,
+                     votelib.evaluate.Evaluator
+                 ],
                  **kwargs) -> Iterable[str]:
     if isinstance(system, votelib.VotingSystem):
         yield f'title={system.name}'
@@ -86,24 +99,25 @@ def _dump_system(system: Union[votelib.VotingSystem, votelib.evaluate.Evaluator]
     elif isinstance(system, votelib.evaluate.TieBreaking):
         yield from _dump_system(system.main, **kwargs)
         yield from _dump_tiebreaker(system.tiebreaker)
-    elif isinstance(system, votelib.evaluate.sequential.TransferableVoteDistributor):
-        warnings.warn('TransferableVoteDistributor class will not be preserved in STV file,'
-                      ' will store TransferableVoteSelector instead')
+    elif isinstance(system, TransferableVoteDistributor):
+        warnings.warn('TransferableVoteDistributor class will not be preserved'
+                      ' in STV file, will store TransferableVoteSelector'
+                      ' instead')
         yield from _dump_tveval(system, **kwargs)
-    elif isinstance(system, votelib.evaluate.sequential.TransferableVoteSelector):
+    elif isinstance(system, TransferableVoteSelector):
         yield from _dump_tveval(system._inner, **kwargs)
 
 
-def _dump_tveval(evaluator: votelib.evaluate.sequential.TransferableVoteDistributor,
+def _dump_tveval(evaluator: TransferableVoteDistributor,
                  output_method: bool = True,
                  ) -> Iterable[str]:
-    print('OM', output_method)
     if output_method:
         if evaluator.retainer is not None:
-            raise NotSupportedInSTV(f'transferable vote retainer {evaluator.retainer}')
+            raise NotSupportedInSTV(f'transferable vote retainer'
+                                    f'{evaluator.retainer}')
         if evaluator.eliminate_step != -1:
             raise NotSupportedInSTV(f'elimination {evaluator.eliminate_step}')
-        if isinstance(evaluator.transferer, votelib.component.transfer.Gregory):
+        if isinstance(evaluator.transferer, transfer.Gregory):
             yield 'method=BC'
         else:
             raise NotSupportedInSTV(f'transfer method {evaluator.transferer}')
@@ -193,7 +207,8 @@ def _name_to_initials(name: str) -> str:
     return ''.join(part[0].lower() for part in re.split(r'\W', name))
 
 
-def _ordinal_candidate_nicks(cand_names: Collection[Candidate]) -> Dict[Candidate, str]:
+def _ordinal_candidate_nicks(cand_names: Collection[Candidate]
+                             ) -> Dict[Candidate, str]:
     n_letters = int(math.ceil(math.log(len(cand_names)) / math.log(26)))
     nicks = {}
     for cand_i, cand in enumerate(cand_names):
@@ -242,22 +257,21 @@ def _load_system(lines: Iterable[str]) -> Tuple[
     syscomps = {}
     candidates = []
     nicks = {}
-    is_ordered = False
+    nick_orders = []
     for line in lines:
         key, value = _parse_header_line(line)
         if key is None:
             continue    # comment or empty line
         elif key == 'ballots':
-            if is_ordered:
+            if nick_orders:
                 # reorder nicks into order= spec
                 nicks = {nick: nicks[nick] for nick in nick_orders}
             return (
                 _create_system(**syscomps), candidates, nicks,
-                _parse_n_ballots(value), is_ordered
+                _parse_n_ballots(value), bool(nick_orders)
             )
         elif key == 'order':
             nick_orders = value.split()
-            is_ordered = True
         elif key in ('candidate', 'withdrawn'):
             nick, name = value.split(None, 1)
             cand = votelib.candidate.Person(
@@ -323,7 +337,7 @@ def _parse_multiplier(mult: str, line_i: int) -> Number:
         if '/' in mult:
             return fractions.Fraction(mult)
         elif '.' in mult:
-            return decimals.Decimal(mult)
+            return decimal.Decimal(mult)
         elif mult.isdigit():
             return int(mult)
     except ValueError as err:
@@ -427,7 +441,7 @@ def _create_evaluator(method: Optional[str] = None,
     if method == 'blt':
         evaluator = votelib.evaluate.UnknownEvaluator()
     else:
-        evaluator = votelib.evaluate.sequential.TransferableVoteSelector(
+        evaluator = TransferableVoteSelector(
             quota_function=quota_function,
             transferer=transferer,
             mandatory_quota=mandatory_quota,

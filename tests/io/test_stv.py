@@ -30,6 +30,7 @@ CUSTOM_VOTES = {
     tuple('CDB'): 29,
     tuple('DAE'): 10,
 }
+CUSTOM_N_SEATS = 2
 UNORDERED_SYSTEM = votelib.VotingSystem(
     'STV Voting Example 2007-05-01',
     votelib.evaluate.FixedSeatCount(
@@ -108,11 +109,17 @@ ordered_result = file_fixture('unordered_out_result', 'ordered.stv')
 
 
 def test_out_custom_system(custom_standard_result):
-    assert votelib.io.stv.dumps(CUSTOM_VOTES, CUSTOM_SYSTEM, n_seats=2) == custom_standard_result
+    assert votelib.io.stv.dumps(CUSTOM_VOTES, CUSTOM_SYSTEM, n_seats=CUSTOM_N_SEATS) == custom_standard_result
 
 
 def test_out_custom_blt(custom_blt_result):
-    assert votelib.io.stv.dumps(CUSTOM_VOTES, n_seats=2) == custom_blt_result
+    assert votelib.io.stv.dumps(CUSTOM_VOTES, n_seats=CUSTOM_N_SEATS) == custom_blt_result
+
+
+def test_in_custom_eval(custom_standard_result):
+    votes, system, candidates = votelib.io.stv.loads(custom_standard_result)
+    check_candidates_equal(system.evaluate(votes), ['A', 'C'])
+    check_candidates_equal(system.evaluator.evaluator.evaluate(votes, 1), ['B'])
 
 
 def test_out_unordered(unordered_out_result):
@@ -215,6 +222,24 @@ def test_in_ordered(ordered_result):
     assert system.evaluator.evaluator.main._inner.mandatory_quota == ORDERED_SYSTEM.evaluator.evaluator.main._inner.mandatory_quota
     assert isinstance(system.evaluator.evaluator.tiebreaker, type(ORDERED_SYSTEM.evaluator.evaluator.tiebreaker))
     assert isinstance(system.evaluator.evaluator.tiebreaker.evaluator, type(ORDERED_SYSTEM.evaluator.evaluator.tiebreaker.evaluator))
+
+
+def test_in_error_bad_quota():
+    with pytest.raises(votelib.io.stv.STVParseError) as excinfo:
+        votelib.io.stv.loads('method=BC\nquota=whatever\nballots=34')
+    assert 'unknown quota' in str(excinfo.value)
+
+
+def test_in_error_invalid_seats():
+    with pytest.raises(votelib.io.stv.STVParseError) as excinfo:
+        votelib.io.stv.loads('method=BC\nseats=whatever\nquota=hare\nballots=34')
+    assert 'invalid seat count' in str(excinfo.value)
+
+
+def test_in_error_duplicate_title():
+    with pytest.raises(votelib.io.stv.STVParseError) as excinfo:
+        votelib.io.stv.loads('title=My Election\ntitle=Her Election\nmethod=GPCA2000\nballots=42')
+    assert 'duplicate' in str(excinfo.value)
 
 
 def test_in_unordered_roundtrip(unordered_out_result):

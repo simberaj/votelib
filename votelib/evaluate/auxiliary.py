@@ -13,6 +13,7 @@ import random
 import struct
 import hashlib
 import unicodedata
+import operator
 from typing import Any, List, Dict, Collection, Optional, Union
 from numbers import Number
 from decimal import Decimal

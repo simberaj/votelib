@@ -22,7 +22,7 @@ class ParseError(Exception):
 
 def loaders(line_loader: Callable[..., FilePayload]
             ) -> Tuple[Callable[..., FilePayload], Callable[..., FilePayload]]:
-    """Create load() and loads() functions from a function accepting an iterable of lines."""
+    """Create load() and loads() functions from an iterating function."""
     return_annot = typing.get_type_hints(line_loader).get('return')
     if return_annot is None:
         return_annot = Any
@@ -38,7 +38,7 @@ def loaders(line_loader: Callable[..., FilePayload]
 
 def dumpers(line_dumper: Callable[..., Iterable[str]]
             ) -> Tuple[Callable[..., None], Callable[..., str]]:
-    """Create dump() and dumps() functions from a function producing an iterable of lines."""
+    """Create dump() and dumps() functions from a line generator function."""
 
     def dump(blt_file: TextIO, *args, **kwargs) -> None:
         for line in line_dumper(*args, **kwargs):
@@ -48,7 +48,8 @@ def dumpers(line_dumper: Callable[..., Iterable[str]]
 
     def dumps(*args, **kwargs) -> str:
         return ''.join(
-            line + ('' if line.endswith('\n') else '\n') for line in line_dumper(*args, **kwargs)
+            line + ('' if line.endswith('\n') else '\n')
+            for line in line_dumper(*args, **kwargs)
         )
 
     return dump, dumps

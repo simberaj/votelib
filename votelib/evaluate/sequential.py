@@ -167,7 +167,8 @@ class TransferableVoteDistributor:
             for cand in sorted(allocation, key=totals.get, reverse=True)
             if cand is not None
         }
-        if sum(avail_seats.values()) == n_rem_seats and not self.mandatory_quota:
+        tot_avail_seats = sum(avail_seats.values())
+        if tot_avail_seats == n_rem_seats and not self.mandatory_quota:
             logger.info('electing all remaining: %s', avail_seats)
             return {}, avail_seats    # elect all remaining, no choice
         else:
@@ -237,6 +238,7 @@ class TransferableVoteDistributor:
         for count_i in range(count_number):
             n_already_elected = sum(seats.values())
             if n_already_elected == n_seats:
+                logger.info('%d seats allocated, terminating', n_seats)
                 break
             if new_allocation is not None:
                 allocation = new_allocation
