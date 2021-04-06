@@ -13,7 +13,6 @@ from fractions import Fraction
 from typing import Any, List, Dict, Tuple, Union, Callable, Optional
 from numbers import Number
 
-
 import votelib.persist
 import votelib.util
 import votelib.component.quota
@@ -83,6 +82,11 @@ class TransferableVoteDistributor:
         specified.)
     :param accept_quota_equal: Whether to use non-strict comparison for the
         number of votes against the quota.
+    :param mandatory_quota: If True, the candidates must reach the quota
+        to be elected, i.e. they cannot be merely the last to be eliminated.
+        If False, as soon as the number of unallocated seats equals the
+        number of remaining candidates, these are all elected regardless
+        of reaching the quota.
     '''
     def __init__(self,
                  transferer: Union[
@@ -94,6 +98,7 @@ class TransferableVoteDistributor:
                      str, Callable[[int, int], Number], None
                  ] = 'droop',
                  accept_quota_equal: bool = True,
+                 mandatory_quota: bool = False,
                  # use_breakpoints: bool = True, - quota + applied
                  ):
         self.transferer = votelib.component.transfer.construct(transferer)
@@ -104,6 +109,7 @@ class TransferableVoteDistributor:
         else:
             self.quota_function = None
         self.accept_quota_equal = accept_quota_equal
+        self.mandatory_quota = mandatory_quota
         self.retainer = retainer
         self.eliminate_step = eliminate_step
 
@@ -161,7 +167,8 @@ class TransferableVoteDistributor:
             for cand in sorted(allocation, key=totals.get, reverse=True)
             if cand is not None
         }
-        if sum(avail_seats.values()) == n_rem_seats:
+        tot_avail_seats = sum(avail_seats.values())
+        if tot_avail_seats == n_rem_seats and not self.mandatory_quota:
             logger.info('electing all remaining: %s', avail_seats)
             return {}, avail_seats    # elect all remaining, no choice
         else:
@@ -198,9 +205,8 @@ class TransferableVoteDistributor:
                     # do not eliminate exhausted votes
                     if cand not in retained and cand is not None
                 ]
-                current_seats = prev_gains
-            logger.info('eliminating %s', eliminated)
             if eliminated:
+                logger.info('eliminating %s', eliminated)
                 new_allocation = self.transferer.transfer(
                     allocation, eliminated
                 )
@@ -232,6 +238,7 @@ class TransferableVoteDistributor:
         for count_i in range(count_number):
             n_already_elected = sum(seats.values())
             if n_already_elected == n_seats:
+                logger.info('%d seats allocated, terminating', n_seats)
                 break
             if new_allocation is not None:
                 allocation = new_allocation
@@ -243,8 +250,6 @@ class TransferableVoteDistributor:
                 prev_gains=seats,
                 max_seats=max_seats,
             )
-            if count_i > 10:
-                raise NotImplementedError
             if not newly_elected and new_allocation == allocation:
                 raise votelib.evaluate.core.VotingSystemError(
                     'infinite loop in STV'
@@ -646,8 +651,7 @@ class TidemanAlternative:
                  n_seats: int = 1,
                  ) -> List[Candidate]:
         ranked_set = []
-        all_set = votelib.util.all_ranked_candidates(votes)
-        eligible_set = set(all_set)
+        eligible_set = set(votelib.util.all_ranked_candidates(votes))
         tier_votes = votes
         while True:
             winner = self.run_tier(tier_votes)

@@ -1,0 +1,28 @@
+title=STV Voting Example 2007-05-01
+seats=3
+method=BC
+quota=hare
+quota=mandatory
+random=37863
+candidate=gb George Brown
+candidate=mg Mary Green
+candidate=ht Hermione Tan
+candidate=hb Harvey Black
+candidate=vs Violet Smith
+candidate=ab Able Body
+ballots=14
+gb
+3X gb ht hb
+ab ht
+2X ht
+3X ab
+hb ht
+2X vs gb ht hb
+vs
+vs mg
+mg vs
+2X mg
+mg vs gb
+ht vs
+ht ab gb hb
+end

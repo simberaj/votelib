@@ -1,9 +1,11 @@
 
 from decimal import Decimal
 from numbers import Number
-from typing import List, Dict, Tuple, Set, Iterable, Optional, TextIO
+from typing import List, Dict, Tuple, Set, Iterable, Optional
 
 import votelib.candidate
+import votelib.util
+import votelib.io.core
 from votelib.candidate import Candidate
 
 
@@ -15,39 +17,21 @@ BLTSpecContents = Tuple[
 ]
 
 
-def load(blt_file: TextIO, **kwargs) -> BLTSpecContents:
-    return _load(blt_file, **kwargs)
+class NotSupportedInBLT(votelib.io.core.NotSupportedInFormat):
+    FORMAT = 'BLT file'
 
 
-def loads(blt_text: str, **kwargs) -> BLTSpecContents:
-    return _load(iter(blt_text.split('\n')), **kwargs)
+class BLTParseError(votelib.io.core.ParseError):
+    pass
 
 
-def dump(blt_file: TextIO,
-         votes: Dict[Tuple[Candidate, ...], Number],
-         n_seats: int,
-         candidates: Optional[List[Candidate]] = None,
-         election_name: Optional[str] = None,
-         **kwargs) -> None:
-    for line in _dump(votes, n_seats, candidates, election_name):
-        blt_file.write(line + '\n')
-
-
-def dumps(votes: Dict[Tuple[Candidate, ...], Number],
-          n_seats: int,
-          candidates: Optional[List[Candidate]] = None,
-          election_name: Optional[str] = None,
-          **kwargs) -> None:
-    return '\n'.join(_dump(votes, n_seats, candidates, election_name))
-
-
-def _dump(votes: Dict[Tuple[Candidate, ...], Number],
-          n_seats: int,
-          candidates: Optional[List[Candidate]] = None,
-          election_name: Optional[str] = None,
-          ) -> Iterable[str]:
+def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
+               n_seats: int,
+               candidates: Optional[List[Candidate]] = None,
+               election_name: Optional[str] = None,
+               ) -> Iterable[str]:
     if candidates is None:
-        candidates = _gather_candidates(votes)
+        candidates = votelib.util.all_ranked_candidates(votes)
     yield _dump_numline([len(candidates), n_seats])
     for i in _get_withdrawn_inds(candidates):
         yield _dump_numline([-(i+i)])
@@ -65,14 +49,7 @@ def _dump(votes: Dict[Tuple[Candidate, ...], Number],
         yield _dump_strline(election_name)
 
 
-def _gather_candidates(votes: Dict[Tuple[Candidate, ...], Number]
-                       ) -> List[Candidate]:
-    cands = []
-    for prefs in votes:
-        for cand in prefs:
-            if cand not in cands:
-                cands.append(cand)
-    return cands
+dump, dumps = votelib.io.core.dumpers(dump_lines)
 
 
 def _get_withdrawn_inds(candidates: List[Candidate]) -> List[int]:
@@ -86,7 +63,12 @@ def _dump_vote(vote: Tuple[Candidate, ...],
                candidates: List[Candidate],
                n_votes: Number,
                ) -> List[Number]:
-    return [n_votes] + [candidates.index(cand) + 1 for cand in vote] + [0]
+    try:
+        cand_indices = [candidates.index(cand) + 1 for cand in vote]
+    except ValueError:
+        raise NotSupportedInBLT(f'equal rankings: {vote}')
+    else:
+        return [n_votes] + cand_indices + [0]
 
 
 def _dump_numline(nums: List[Number]) -> str:
@@ -97,18 +79,18 @@ def _dump_strline(string: str) -> str:
     return f'"{string}"'
 
 
-def _load(blt_lines: Iterable[str],
-          oneplus_weights: bool = False,
-          ) -> BLTSpecContents:
+def load_lines(blt_lines: Iterable[str],
+               oneplus_weights: bool = False,
+               ) -> BLTSpecContents:
     try:
         n_cands, n_seats = _parse_header(next(blt_lines))
     except StopIteration as e:
-        raise ValueError('empty BLT file') from e
+        raise BLTParseError('empty BLT file') from e
     ballots, withdrawn = _parse_body(
         blt_lines,
         oneplus_weights=oneplus_weights
     )
-    candidates, election_name = _parse_strings(blt_lines)
+    candidates, election_name = _parse_strings(blt_lines, n_cands)
     if candidates is None:
         candidates = _numeric_candidates(n_cands)
     candidates = _form_candidate_objects(candidates, withdrawn)
@@ -119,6 +101,9 @@ def _load(blt_lines: Iterable[str],
         candidates,
         election_name,
     )
+
+
+load, loads = votelib.io.core.loaders(load_lines)
 
 
 def _numeric_candidates(n_cands: int) -> List[str]:
@@ -157,8 +142,8 @@ def _parse_header(blt_line: str) -> Tuple[int, int]:
     if is_ok:
         return tuple(blt_result)
     else:
-        raise ValueError(f'need two integers (candidate and seat count) in BLT'
-                         f'file header line, got {blt_result!r}')
+        raise BLTParseError(f'need two integers (candidate and seat count)'
+                            f' in BLT file header line, got {blt_result!r}')
 
 
 def _parse_body(blt_lines: Iterable[str],
@@ -176,8 +161,8 @@ def _parse_body(blt_lines: Iterable[str],
             return ballots, withdrawn
         elif result[0] < 0:
             if ballots_encountered:
-                raise ValueError('withdrawn candidate line after ballot line: '
-                                 f'{line!r}')
+                raise BLTParseError('withdrawn candidate line after ballot'
+                                    f' line: {line!r}')
             # Withdrawn candidates. Allow more than one per line.
             withdrawn.update(-n for n in result)
         else:
@@ -188,10 +173,12 @@ def _parse_body(blt_lines: Iterable[str],
                 ballots[ballot] = 0
             ballots[ballot] += weight
             ballots_encountered = True
-    raise ValueError('incomplete BLT file: EOF before ballot list terminator')
+    raise BLTParseError('incomplete BLT file:'
+                        ' EOF before ballot list terminator')
 
 
-def _parse_strings(blt_lines: Iterable[str]
+def _parse_strings(blt_lines: Iterable[str],
+                   n_cands: int,
                    ) -> Tuple[Optional[List[str]], Optional[str]]:
     parsed_lines = []
     empty_encountered = False
@@ -199,18 +186,29 @@ def _parse_strings(blt_lines: Iterable[str]
         blt_line = _clean_line(blt_line)
         if blt_line.startswith('"') and blt_line.endswith('"'):
             if empty_encountered:
-                raise ValueError(f'nonempty line after empty: {blt_line!r}')
+                raise BLTParseError(f'nonempty line after empty: {blt_line!r}')
             parsed_lines.append(blt_line[1:-1])
         elif not blt_line:
             empty_encountered = True
         else:
-            raise ValueError(f'invalid BLT string line: {blt_line!r}')
+            raise BLTParseError(f'invalid BLT string line: {blt_line!r}')
     if not parsed_lines:
         return None, None
-    elif len(parsed_lines) == 1:
-        return None, parsed_lines[0]
-    else:
+    if len(parsed_lines) == 1:
+        if n_cands == 1:
+            return parsed_lines[0], None
+        else:
+            return None, parsed_lines[0]
+    elif len(parsed_lines) < n_cands:
+        raise BLTParseError(f'not enough candidate names: {len(parsed_lines)}'
+                            f' given, {n_cands} set in header')
+    elif len(parsed_lines) == n_cands:
+        return parsed_lines, None
+    elif len(parsed_lines) == n_cands + 1:
         return parsed_lines[:-1], parsed_lines[-1]
+    else:
+        raise BLTParseError(f'too many strings: {len(parsed_lines)} found'
+                            f'but expecting {n_cands} candidate names + title')
 
 
 def _clean_line(blt_line: str) -> str:
@@ -229,7 +227,8 @@ def _parse_ballot(nums: List[Number]) -> Tuple[Number, Tuple[int, ...]]:
     # apart from the first one are assumed to be integers.
     # Check the trailing zero and strip it.
     if nums[-1] != 0:
-        raise ValueError(f'ballot line must be zero-terminated, got {nums!r}')
+        raise BLTParseError('ballot line must be zero-terminated,'
+                            f'got {nums!r}')
     nums = nums[:-1]
     # The first element is weight, the rest are candidate indices.
     return nums[0], tuple(nums[1:])
@@ -250,7 +249,7 @@ def _parse_numline(blt_line: str,
         elif i == 0 and allow_first_decimal:
             nums.append(Decimal(numstr))
         else:
-            raise ValueError(f'invalid BLT numberline item: {numstr!r}'
-                             f'(first decimal item'
-                             f'allowed: {allow_first_decimal})')
+            raise BLTParseError(f'invalid BLT numberline item {i}: {numstr!r}'
+                                f'(first decimal item'
+                                f'allowed: {allow_first_decimal})')
     return nums

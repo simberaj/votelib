@@ -1,0 +1,16 @@
+title=Example Election
+method=BC
+quota=droop
+random=1711
+seats=2
+candidate=a A
+candidate=b B
+candidate=c C
+candidate=d D
+candidate=e E
+ballots=4
+31X a e c d b
+30X b a e
+29X c d b
+10X d a e
+end

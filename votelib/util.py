@@ -9,7 +9,7 @@ import collections
 import bisect
 import random
 from fractions import Fraction
-from typing import Any, List, Tuple, Dict, FrozenSet, Union
+from typing import Any, List, Tuple, Dict, Union, Iterable
 from numbers import Number
 
 from votelib.vote import RankedVoteType
@@ -36,19 +36,42 @@ def descending_dict(d: Dict[Any, Number]) -> Dict[Any, Number]:
 
 
 def all_ranked_candidates(votes: Dict[RankedVoteType, Any]
-                          ) -> FrozenSet[Candidate]:
-    '''Return the set of all candidates appearing in any of the rankings.
+                          ) -> List[Candidate]:
+    '''Return a list of all candidates appearing in any of the rankings.
+
+    Preserves the input ordering (i.e. first, the candidates ranked in any
+    first choice position are listed in the order of the first such vote,
+    first vote are listed, then all remaining candidates from the second vote,
+    etc.)
 
     :param votes: Ranked votes.
+    :returns: All unique candidates from the ranked votes.
     '''
-    all_candidates = set()
-    for ranked in votes.keys():
-        for positioned in ranked:
-            if isinstance(positioned, collections.abc.Set):
-                all_candidates.update(positioned)
-            else:
-                all_candidates.add(positioned)
-    return frozenset(all_candidates)
+    output = []
+    for cand, rank_i, n_votes in all_rankings(votes):
+        if cand not in output:
+            output.append(cand)
+    return output
+
+
+def all_rankings(votes: Dict[RankedVoteType, Any]
+                 ) -> Iterable[Tuple[Candidate, int, Any]]:
+    rank_i = 0
+    while True:
+        used = False
+        for ranking, n_votes in votes.items():
+            if len(ranking) > rank_i:
+                used = True
+                positioned = ranking[rank_i]
+                if isinstance(positioned, collections.abc.Set):
+                    for cand in positioned:
+                        yield cand, rank_i, n_votes
+                else:
+                    yield positioned, rank_i, n_votes
+        if used:
+            rank_i += 1
+        else:
+            break
 
 
 def distribution_to_selection(d: Dict[Any, Number]) -> List[Any]:

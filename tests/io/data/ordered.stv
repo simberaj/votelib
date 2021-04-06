@@ -1,0 +1,16 @@
+title=Test of Choice Voting
+method=GPCA2000
+seats=3
+random=non
+candidate=gb George Brown
+candidate=mg Mary Green
+candidate=ht Hermione Tan
+candidate=hb Harvey Black
+candidate=vs Violet Smith
+candidate=ab Able Body
+order=gb mg ht hb vs ab
+ballots=3
+1 - 2 3 - -
+1 - 2 3 - -
+- - 1 2 - -
+end

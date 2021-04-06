@@ -24,7 +24,7 @@ QUOTAS = {}
 
 
 quota_mark, get, construct = votelib.component.core.register_functions(
-    QUOTAS, 'quota', Callable[[int], Number]
+    QUOTAS, 'quota', Callable[[int, int], Number]
 )
 
 
@@ -102,3 +102,11 @@ def _round_half_up(var: Fraction) -> int:
         return int(math.ceil(var))
     else:
         return int(round(var))
+
+
+class constant:
+    def __init__(self, quota: Number):
+        self.quota = quota
+
+    def __call__(self, votes: int, seats: int) -> Number:
+        return self.quota
