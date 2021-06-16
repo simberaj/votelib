@@ -1,0 +1,11 @@
+# Case 7 -Declared, bracketed candidate tokens. Ranked, no score.
+
+[Doña García Márquez]: DGM
+[Steven B. Jensen]: SBJ
+[Sue Ye (蘇業)]: SY
+[Adam Muñoz]: AM
+
+27: DGM > SBJ > SY > AM
+26: SBJ > DGM = SY > AM
+24: SY > DGM = AM > SBJ
+23: AM > SY > DGM > SBJ

@@ -1,0 +1,5 @@
+# Case 3 - Scores using = and > as delimiters
+
+12: Allie/5 =Billy/5 >Candace/4 >Dennis/3 =Edith/3 >Frank/2 >Georgie/1 >Harold/0
+7: Georgie/5 >Allie/4 >Dennis/3 =Harold/3 >Candace/2 >Edith/1 >Billy/0 =Frank/0
+5: Frank/5 >Edith/4 =Harold/4 >Billy/3 =Dennis/3 =Georgie/3 >Candace/2 >Allie/0
