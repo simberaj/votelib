@@ -1,0 +1,14 @@
+# Case 9 - Asterisk-delimited multiplier
+#
+# Suggested by Jan Šimbera in May 2020:
+# http://lists.electorama.com/pipermail/election-methods-electorama.com/2021-June/002793.html
+
+[Doña García Márquez]: DGM
+[Steven B. Jensen]: SBJ
+[Sue Ye (蘇業)]: SY
+[Adam Muñoz]: AM
+
+27 * DGM/5, SBJ/2, SY/1, AM/0
+26 * DGM/3, SBJ/5, SY/3, AM/1
+24 * DGM/2, SBJ/1, SY/5, AM/2
+23 * DGM/1, SBJ/0, SY/3, AM/5

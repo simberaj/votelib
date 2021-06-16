@@ -1,0 +1,5 @@
+# Case 2 - ranked ballots with ABCDEFGH candidate set
+
+12: Allie=Billy>Candace>Dennis=Edith>Frank>Georgie>Harold
+7: Georgie>Allie>Dennis=Harold>Candace>Edith>Billy=Frank
+5: Frank>Edith=Harold>Billy=Dennis=Georgie>Candace>Allie

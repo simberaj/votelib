@@ -1,0 +1,8 @@
+# Case 1 - unordered scores
+#
+# Test case above copied from reddit post by /user/jman722
+# https://www.reddit.com/r/EndFPTP/comments/nkm2cd/
+
+12: Allie/5, Billy/5, Candace/4, Dennis/3, Edith/3, Frank/2, Georgie/1, Harold/0
+7: Allie/4, Billy/0, Candace/2, Dennis/3, Edith/1, Frank/0, Georgie/5, Harold/3
+5: Allie/0, Billy/3, Candace/2, Dennis/3, Edith/4, Frank/5, Georgie/3, Harold/4

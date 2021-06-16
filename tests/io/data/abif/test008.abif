@@ -1,0 +1,10 @@
+# Case 8 - Mixed bracketed candidate tokens. Ranked, no score. Sans whitespace.
+
+[Doña García Márquez]:DGM
+[Steven B. Jensen]:SBJ
+[Adam Muñoz]:AM
+
+27:DGM>SBJ>[蘇業]>AM
+26:SBJ>DGM=[蘇業]>AM
+24:[蘇業]>DGM=AM>SBJ
+23:AM>[蘇業]>DGM>SBJ
