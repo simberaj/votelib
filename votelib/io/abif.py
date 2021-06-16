@@ -1,4 +1,5 @@
 
+<<<<<<< HEAD
 import re
 from decimal import Decimal
 from numbers import Number
@@ -7,6 +8,14 @@ from typing import List, Dict, Tuple, Set, Iterable, Optional, TextIO, Union
 import votelib.candidate
 import votelib.vote
 import votelib.io.core
+=======
+from decimal import Decimal
+from numbers import Number
+from typing import List, Dict, Tuple, Set, Iterable, Optional, TextIO
+
+import votelib.candidate
+import votelib.vote
+>>>>>>> 345057d5da9527e0841c8e791891a90cfff9f618
 from votelib.candidate import Candidate
 
 
