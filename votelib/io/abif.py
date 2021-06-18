@@ -1,5 +1,4 @@
 
-<<<<<<< HEAD
 import re
 from decimal import Decimal
 from numbers import Number
@@ -8,23 +7,19 @@ from typing import List, Dict, Tuple, Set, Iterable, Optional, TextIO, Union
 import votelib.candidate
 import votelib.vote
 import votelib.io.core
-=======
-from decimal import Decimal
-from numbers import Number
-from typing import List, Dict, Tuple, Set, Iterable, Optional, TextIO
-
-import votelib.candidate
-import votelib.vote
->>>>>>> 345057d5da9527e0841c8e791891a90cfff9f618
 from votelib.candidate import Candidate
 
 
 ABIFSpecContents = Dict[votelib.vote.AnyVoteType, Number]
 
 SHORTHAND_PATTERN = r'[A-Za-z]+'
+FULLNAME_PATTERN = r'\[.+?\]'
 RE_SHORTHAND_TOKEN = re.compile(SHORTHAND_PATTERN)
-RE_CANDIDATE_TOKEN = re.compile(r'((?:\[.+?\])|(?:' + SHORTHAND_PATTERN + '))')
+RE_FULLNAME_TOKEN = re.compile(FULLNAME_PATTERN)
+RE_CANDIDATE_TOKEN = re.compile(r'((?:' + FULLNAME_PATTERN + ')|(?:' + SHORTHAND_PATTERN + '))')
+RE_VOTE_COUNT_DELIMITER = re.compile(':|[*]')
 # RE_SCORE = re.compile('[0-9]+(?:\.[0-9]+)?')
+
 
 class ABIFParseError(votelib.io.core.ParseError):
     pass
@@ -54,7 +49,7 @@ def _dump(votes: Dict[votelib.vote.AnyVoteType, Number]) -> Iterable[str]:
     raise NotImplementedError
 
 
-# TODO spec uncertainties, simple vote conversion, streamline vote type detection, headers?
+# TODO spec uncertainties, testcase for simple vote conversion, streamline vote type detection, headers?
 def _load(abif_lines: Iterable[str]) -> ABIFSpecContents:
     votes = {}
     shorthands = {}
@@ -79,13 +74,26 @@ def _load(abif_lines: Iterable[str]) -> ABIFSpecContents:
         elif line[0] not in ('{', '#'):
             # Skip metadata, comments and empty lines, otherwise give an error.
             raise ABIFParseError(f'invalid line: {line!r}')
+    if _holds_simple_votes(votes):
+        votes = {vote.pop(): n_votes for vote, n_votes in votes.items()}
     return votes
+
+
+def _holds_simple_votes(votes: Dict[votelib.vote.AnyVoteType, Number]) -> bool:
+    for vote in votes.keys():
+        if not isinstance(vote, frozenset):
+            return False
+        elif vote and len(vote) > 1:
+            return False
+        elif vote and isinstance(vote[0], tuple):
+            return False
+    return True
 
 
 def _parse_vote_line(line: str,
                      shorthands: Dict[str, str],
                      ) -> Tuple[votelib.vote.AnyVoteType, Number]:
-    number, vote_part = line.split(':', 1)
+    number, vote_part = RE_VOTE_COUNT_DELIMITER.split(line, maxsplit=1)
     return (
         _parse_vote(vote_part.strip(), shorthands)[0],
         _parse_number(number.strip(), 'vote count')
@@ -111,22 +119,39 @@ def _parse_vote(vote_str: str,
 
 
 def _tokenize_vote(vote_str: str) -> List[str]:
-    tokens = [token.strip() for token in RE_CANDIDATE_TOKEN.split(vote_str)]
-    if tokens[0] != '':
-        raise ABIFParseError(f'vote line does not start with candidate token: {vote_str!r}')
-    tokens = tokens[1:]
-    cut_at = None
-    # Find comments and delete them.
-    for i, token in enumerate(tokens):
-        if token and token[0] == '#':
-            cut_at = i
-            break
-    if cut_at is not None:
-        tokens = tokens[:cut_at]
-    else:
-        if tokens[-1] != '':
-            raise ABIFParseError(f'vote line does not end with candidate token: {vote_str!r}')
-        tokens = tokens[:-1]
+    tokens = []
+    # print('TOKENIZING', vote_str)
+    for i, token in enumerate(RE_CANDIDATE_TOKEN.split(vote_str)):
+        leftover_token = None
+        seen_slash = False
+        token = token.strip()
+        # print(i, repr(token))
+        if i == 0:
+            if token:
+                raise ABIFParseError(f'vote line does not start with candidate token: {vote_str!r}')
+        elif i % 2 == 0:
+            # non-candidate token, split it if necessary
+            if '#' in token:
+                token = token[:token.find('#')].rstrip()
+            if token and token[0] == '/':
+                tokens.append('/')
+                token = token[1:].lstrip()
+                seen_slash = True
+            if token and token[-1] in ('>', '=', ','):
+                leftover_token = token[-1]
+                token = token[:-1].rstrip()
+            if token and seen_slash:
+                # anything left over must be a score
+                tokens.append(token)
+                token = ''
+            if token:
+                raise ABIFParseError(f'unrecognized vote line chunk: {token!r} in {vote_str!r}')
+            if leftover_token:
+                tokens.append(leftover_token)
+        elif not token:
+            raise ABIFParseError(f'empty candidate token at {vote_str!r}')
+        else:
+            tokens.append(token)
     return tokens
 
 
@@ -154,7 +179,7 @@ def _parse_list_tokens(tokens: List[str],
         elif token == ',':
             expect_cand = True
         else:
-            raise ABIFParseError(f'invalid token in approval vote: {token}')
+            raise ABIFParseError(f'invalid token in approval vote: {token!r}')
     return frozenset(cands)
 
 
@@ -176,7 +201,7 @@ def _parse_ranked_tokens(tokens: List[str],
         elif token == '=':
             expect_cand = True
         else:
-            raise ABIFParseError(f'invalid token in ranked vote: {token}')
+            raise ABIFParseError(f'invalid token in ranked vote: {token!r}')
     return tuple(
         frozenset(rank) if len(rank) > 1 else rank[0]
         for rank in all_ranks + [last_rank]
@@ -199,7 +224,7 @@ def _parse_score_tokens(tokens: List[str],
             if token == '/':
                 expect = 'score'
             else:
-                raise ABIFParseError(f'expecting slash in score vote, got {token}')
+                raise ABIFParseError(f'expecting slash in score vote, got {token!r}')
         elif expect == 'score':
             current_score = _parse_number(token, 'score')
             expect = 'sep'
@@ -207,10 +232,19 @@ def _parse_score_tokens(tokens: List[str],
             if token in ('>', '=', ','):
                 expect = 'cand'
                 scores.append((current_cand, current_score))
+                current_cand = None
+                current_score = None
             else:
-                raise ABIFParseError(f'expecting separator in score vote, got {token}')
+                raise ABIFParseError(f'expecting separator in score vote, got {token!r}')
         else:
             raise ABIFParseError
+    if expect == 'sep':
+        scores.append((current_cand, current_score))
+        current_cand = None
+        current_score = None
+    if current_cand or current_score:
+        raise ABIFParseError(f'score vote line not properly terminated, '
+                             f'leftover candidate {current_cand} and score {current_score}')
     return frozenset(scores)
 
 
@@ -230,4 +264,22 @@ def _parse_candidate_token(token: str, shorthands: Dict[str, str]) -> str:
     elif RE_SHORTHAND_TOKEN.fullmatch(token):
         return token
     else:
-        raise ABIFParseError(f'invalid candidate token: {token}')
+        raise ABIFParseError(f'invalid candidate token: {token!r}')
+
+
+def _parse_candidate_mapping(line: str) -> Tuple[str, str]:
+    fullname_match = RE_FULLNAME_TOKEN.match(line)
+    if fullname_match is None:
+        raise ABIFParseError(f'invalid candidate full name mapping line: {line!r}')
+    fullname_token = fullname_match.group(0)
+    fullname = fullname_token[1:-1]    # strip square brackets
+    restof_line = line[len(fullname_token):].lstrip()
+    if restof_line[0] != ':':
+        raise ABIFParseError(f'invalid candidate full name mapping: full name '
+                             f'token must be followed by colon, got {restof_line!r}')
+    restof_line = restof_line[1:].lstrip()
+    shorthand_match = RE_SHORTHAND_TOKEN.fullmatch(restof_line)
+    if shorthand_match is None:
+        raise ABIFParseError(f'did not find shorthand in candidate full name'
+                             f'mapping line: {restof_line!r}')
+    return shorthand_match.group(0), fullname
