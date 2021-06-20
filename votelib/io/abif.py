@@ -2,7 +2,7 @@
 import re
 from decimal import Decimal
 from numbers import Number
-from typing import List, Dict, Tuple, Set, Iterable, Optional, TextIO, Union
+from typing import List, Dict, Tuple, Set, Iterable, Optional, TextIO, Union, Callable
 
 import votelib.candidate
 import votelib.vote
@@ -19,6 +19,10 @@ RE_FULLNAME_TOKEN = re.compile(FULLNAME_PATTERN)
 RE_CANDIDATE_TOKEN = re.compile(r'((?:' + FULLNAME_PATTERN + ')|(?:' + SHORTHAND_PATTERN + '))')
 RE_VOTE_COUNT_DELIMITER = re.compile(':|[*]')
 # RE_SCORE = re.compile('[0-9]+(?:\.[0-9]+)?')
+
+
+class NotSupportedInBLT(votelib.io.core.NotSupportedInFormat):
+    FORMAT = 'ABIF file'
 
 
 class ABIFParseError(votelib.io.core.ParseError):
@@ -46,7 +50,70 @@ def dumps(votes: Dict[votelib.vote.AnyVoteType, Number],
 
 
 def _dump(votes: Dict[votelib.vote.AnyVoteType, Number]) -> Iterable[str]:
-    raise NotImplementedError
+    if votes:
+        vote_serializer = _get_vote_serializer(next(iter(votes.keys())))
+        for vote, num in votes.items():
+            num_str = _dump_number(num)
+            vote_str = vote_serializer(vote)
+            yield f'{num_str}: {vote_str}'
+    else:
+        yield ''
+
+
+def _get_vote_serializer(vote: votelib.vote.AnyVoteType) -> Callable[[votelib.vote.AnyVoteType], str]:
+    if isinstance(vote, frozenset):
+        if all(isinstance(item, tuple) and len(item) == 2 for item in vote):
+            return _dump_score_vote
+        else:
+            return _dump_approval_vote
+    elif isinstance(vote, tuple):
+        return _dump_ranked_vote
+    else:
+        return _dump_candidate
+
+
+def _dump_candidate(candidate: Candidate) -> str:
+    if hasattr(candidate, 'name') and candidate.name is not None:
+        cand_str = candidate.name
+    else:
+        cand_str = str(candidate)
+    if ']' in cand_str:
+        raise NotSupportedInABIF(f'right square bracket in candidate name: {cand_str}')
+    elif RE_SHORTHAND_TOKEN.fullmatch(cand_str):
+        return cand_str
+    else:
+        return '[' + cand_str + ']'
+
+
+def _dump_approval_vote(vote: votelib.vote.ApprovalVoteType) -> str:
+    return ', '.join(_dump_candidate(item) for item in vote)
+
+
+def _dump_ranked_vote(vote: votelib.vote.RankedVoteType) -> str:
+    return '>'.join(
+        (
+            '='.join(
+                _dump_candidate(eqranked) for eqranked in item
+            )
+            if isinstance(item, frozenset)
+            else _dump_candidate(item)
+        )
+        for item in vote
+    )
+
+
+def _dump_score_vote(vote: votelib.vote.ScoreVoteType) -> str:
+    return ', '.join(
+        '/'.join((_dump_candidate(cand), _dump_number(score)))
+        for cand, score in vote
+    )
+
+
+def _dump_number(number: Number) -> str:
+    if isinstance(number, (int, Decimal)):
+        return str(number)
+    else:
+        raise NotSupportedInABIF(f'invalid number type: {type(number)} ({number})')
 
 
 # TODO spec uncertainties, testcase for simple vote conversion, streamline vote type detection, headers?
@@ -114,7 +181,6 @@ def _parse_vote(vote_str: str,
                 ) -> Tuple[votelib.vote.AnyVoteType, str]:
     tokens = _tokenize_vote(vote_str)
     vote_type = _get_vote_type(tokens)
-    print(tokens, vote_type)
     return VOTE_PARSERS[vote_type](tokens, shorthands), vote_type
 
 

@@ -48,9 +48,41 @@ FILES_EXPECTED['test005'] = FILES_EXPECTED['test004']
 FILES_EXPECTED['test006'] = FILES_EXPECTED['test004']
 FILES_EXPECTED['test009'] = FILES_EXPECTED['test004']
 
+FAILS = [
+    ': A>B',    # missing ballot count number
+    '0xab: A>B',    # invalid ballot count number
+    'A>B \nA>B \nB>A',    # no ballot counts
+    'some random text \n3: A>B=C>D',    # free hanging text
+    '3: >B>C',    # does not start with candidate token
+    '3: A>>C',    # missing candidate token
+    '3: A>=C',    # missing candidate token
+    '3: A$$>C',    # invalid candidate token
+    '2: A > C, B, D',    # mixing commas and rankings in non-score vote
+    '2: A, B > C = D',    # mixing commas and rankings in non-score vote
+    '1: A/2, B, C, D',    # mixing score vote and other
+    '1: A/2, B',    # mixing score vote and other
+    '1: A, B/3, C/2, D',    # mixing score vote and other
+    '1: A/1 B/3 C/2',    # score vote w/o separator
+    '1: A B C',    # approval vote w/o separator
+    '1: Á > Č = Ď',    # unbracketed non-ascii
+    # TODO add candidate mapping parsing errors after that part of spec is stabilized
+]
+
 
 @pytest.mark.parametrize('filename, expected', list(FILES_EXPECTED.items()))
 def test_files_output(filename, expected):
     with open(os.path.join(DATA_DIR, f'{filename}.abif'), 'r', encoding='utf8') as infile:
         result = votelib.io.abif.load(infile)
     assert result == expected
+
+
+@pytest.mark.parametrize('expected', list(FILES_EXPECTED.values()))
+def test_roundtrip(expected):
+    roundtripped = votelib.io.abif.loads(votelib.io.abif.dumps(expected))
+    assert roundtripped == expected
+
+
+@pytest.mark.parametrize('abif', FAILS)
+def test_fail(abif):
+    with pytest.raises(votelib.io.abif.ABIFParseError):
+        result = votelib.io.abif.loads(abif)
