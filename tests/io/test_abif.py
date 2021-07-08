@@ -65,6 +65,7 @@ FAILS = [
     '1: A/1 B/3 C/2',    # score vote w/o separator
     '1: A B C',    # approval vote w/o separator
     '1: Á > Č = Ď',    # unbracketed non-ascii
+    '1: [A > B',    # unclosed bracket
     # TODO add candidate mapping parsing errors after that part of spec is stabilized
 ]
 
