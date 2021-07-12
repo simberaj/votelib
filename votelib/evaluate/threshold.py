@@ -151,8 +151,9 @@ class PropertyBracketer:
     special seatless selectors for such special cases.
 
     :param property: The property (attribute) of the candidate to get as the
-        key to distinguish which evaluator to use. ``getattr()`` is used on the
-        candidate objects.
+        key to distinguish which evaluator to use. To get the property, if
+        the candidate object has a *properties* attribute, it is used,
+        otherwise, ``getattr()`` is used on the candidate object directly.
     :param evaluators: A dictionary mapping the values of the property
         to the corresponding seatless selector such as
         :class:`RelativeThreshold`.
@@ -178,18 +179,20 @@ class PropertyBracketer:
                  ) -> List[Candidate]:
         '''Select candidates by dispatching to partial selectors.
 
-        :param votes: Simple votes. The keys in the dictionary should provide
-            the property name specified at the setup of this elector; if they
-            do not, the default evaluator is used for them.
+        :param votes: Simple votes. The keys in the dictionary (i.e.
+            candidate objects) should provide the property name specified
+            at the setup of this elector; if they do not, the default evaluator
+            is used for them.
         '''
         variants = {}
         results = []
         for cand, _ in votelib.util.sorted_votes(votes):
-            cand_var = getattr(cand, self.property, NotImplemented)
+            if hasattr(cand, 'properties'):
+                cand_var = cand.properties.get(self.property, NotImplemented)
+            else:
+                cand_var = getattr(cand, self.property, NotImplemented)
             if cand_var not in variants:
-                var_eval = self.evaluators.get(
-                    cand_var, self.default
-                )
+                var_eval = self.evaluators.get(cand_var, self.default)
                 if var_eval:
                     variants[cand_var] = var_eval.evaluate(votes)
                 else:

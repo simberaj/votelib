@@ -146,8 +146,12 @@ def _select_n_random_float(candidates: List[Any],
     )
 
 
-def exact_mean(values: List[Union[int, Fraction]]) -> Fraction:
-    return Fraction(sum(values), len(values))
+def exact_mean(values: List[Number]) -> Number:
+    total = sum(values)
+    if isinstance(total, float):
+        return total / len(values)
+    else:
+        return Fraction(total, len(values))
 
 
 EXACT_AGGREGATORS = {

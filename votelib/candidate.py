@@ -6,13 +6,10 @@ Contains definitions of candidate types and interfaces (:class:`Candidate`,
 :class:`ReopenNominations`) and candidate/nomination validators
 (:class:`BasicNominator`, :class:`PersonNominator`, :class:`PartyNominator`).
 
-In the current version of Votelib, special candidate objects are not
-needed (any hashable objects such as strings can be used for most
-functionality implemented so far and will continue to be supported by it
-in the future). However, some classes specify interface that are required by
-a handful of system objects so if you want to use those system objects,
-using the subclasses is necessary.
-
+Apart from the candidate objects specified here, Votelib also accepts strings
+with candidate names in all concerned places. The subclasses of this class
+are thus only needed for systems considering candidate properties
+such as coalition size-dependent electoral thresholds.
 For a particular example of this, the
 :class:`votelib.evaluate.threshold.PropertyBracketer` chooses different rules
 based on a value of an arbitrary property of the candidate. You can use any
@@ -24,7 +21,7 @@ from __future__ import annotations
 
 import abc
 import collections
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, Union, Dict
 
 from votelib.persist import simple_serialization
 
@@ -47,39 +44,27 @@ class CandidateError(Exception):
         super().__init__(message)
 
 
-class Candidate(metaclass=abc.ABCMeta):
+class CandidateObject(metaclass=abc.ABCMeta):
     '''An abstract class for election candidates.
 
     The subclass check is overridden so that any hashable object that is not
     a set or tuple is accepted. Subclasses will not inherit this override.
 
-    In the current version of Votelib, special candidate objects are not
-    needed (any hashable objects such as strings can be used for most
-    functionality implemented so far and will continue to be supported by it
-    in the future) so this is essentially just a type marker. However,
-    some subclasses specify methods that are required by some system objects
-    so if you want to use those system objects, using the subclasses is
-    necessary.
+    Apart from subclasses of this class, Votelib also accepts strings with
+    candidate names in all concerned places. The subclasses of this class
+    are thus only needed for systems considering candidate properties
+    such as coalition size-dependent electoral thresholds.
     '''
 
     withdrawn: bool = False
     '''Whether the candidate withdrew from the election (and is thus ineligible
     to get elected).'''
 
-    @classmethod
-    def __subclasshook__(cls, subcl):
-        if cls is Candidate:
-            return (
-                hasattr(subcl, '__hash__')
-                and subcl.__hash__ is not None
-                and not issubclass(subcl, collections.abc.Set)
-                and not issubclass(subcl, tuple)
-            )
-        else:
-            return super().__subclasshook__(subcl)
+
+Candidate = Union[str, CandidateObject]
 
 
-class IndividualElectionOption(Candidate):
+class IndividualElectionOption(CandidateObject):
     '''An abstract class for individuals standing for an election.'''
 
     candidacy_for: Optional[ElectionParty] = NotImplemented
@@ -119,14 +104,14 @@ class Person(IndividualElectionOption):
                  number: Optional[int] = None,
                  membership: Optional[PoliticalParty] = None,
                  candidacy_for: Optional[ElectionParty] = None,
-                 properties: List[str] = [],
+                 properties: Dict[str, Any] = None,
                  withdrawn: bool = False,
                  ):
         self.name = name
         self.number = number
         self.membership = membership
         self.candidacy_for = candidacy_for
-        self.properties = properties
+        self.properties = properties if properties is not None else {}
         self.withdrawn = withdrawn
 
     def __repr__(self) -> str:
@@ -137,7 +122,7 @@ class Person(IndividualElectionOption):
         )
 
 
-class ElectionParty(Candidate):
+class ElectionParty(CandidateObject):
     '''A subject that is regarded as a political party for the election.'''
 
     is_coalition = NotImplemented
@@ -166,14 +151,14 @@ class PoliticalParty(ElectionParty):
                  number: Optional[int] = None,
                  affiliations: Optional[List[PoliticalParty]] = None,
                  lead: Optional[Person] = None,
-                 properties: List[str] = [],
+                 properties: Dict[str, Any] = None,
                  withdrawn: bool = False,
                  ):
         self.name = name
         self.number = number
         self.affiliations = affiliations
         self.lead = lead
-        self.properties = properties
+        self.properties = properties if properties is not None else {}
         self.withdrawn = withdrawn
 
     def __repr__(self) -> str:
@@ -398,7 +383,7 @@ class BasicNominator(Nominator):
         :param candidate: Candidate to be checked.
         :raises CandidateError: If a candidate is invalid.
         '''
-        if not isinstance(candidate, Candidate):
+        if not isinstance(candidate, (str, CandidateObject)):
             raise CandidateError(f'invalid candidate {candidate}')
         if not self.allow_blank and isinstance(candidate, BlankVoteOption):
             raise CandidateError('blank vote')
