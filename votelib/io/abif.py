@@ -21,7 +21,7 @@ RE_VOTE_COUNT_DELIMITER = re.compile(':|[*]')
 # RE_SCORE = re.compile('[0-9]+(?:\.[0-9]+)?')
 
 
-class NotSupportedInBLT(votelib.io.core.NotSupportedInFormat):
+class NotSupportedInABIF(votelib.io.core.NotSupportedInFormat):
     FORMAT = 'ABIF file'
 
 
@@ -110,7 +110,7 @@ def _dump_score_vote(vote: votelib.vote.ScoreVoteType) -> str:
 
 
 def _dump_number(number: Number) -> str:
-    if isinstance(number, (int, Decimal)):
+    if isinstance(number, int):
         return str(number)
     else:
         raise NotSupportedInABIF(f'invalid number type: {type(number)} ({number})')
@@ -170,8 +170,6 @@ def _parse_vote_line(line: str,
 def _parse_number(numstr: str, oftype: str = 'ABIF') -> Union[int, Decimal]:
     if numstr.isdigit():
         return int(numstr)
-    elif '.' in numstr and numstr.replace('.', '').isdigit():
-        return Decimal(numstr)
     else:
         raise ABIFParseError(f'invalid {oftype} number: {numstr!r}')
 
