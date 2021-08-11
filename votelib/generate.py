@@ -100,7 +100,6 @@ class DistributionSampler(Sampler):
                n_dims: Optional[int] = None,
                ) -> Iterable[Tuple[float, ...]]:
         """A generator to sample n issue space samples from the distribution."""
-        print(self.n_dims, n_dims)
         if self.n_dims is None:
             if n_dims is None:
                 raise ValueError('need n_dims arg when not set on instance')
@@ -228,10 +227,10 @@ class IssueSpaceGenerator:
         )
 
     def _create_candidates(self, n: int) -> Dict[Candidate, Tuple[float, ...]]:
-        coors = self.sampler.sample(n=self.candidates)
-        if n > 26:
-            raise NotImplementedError
-        return dict(zip(string.ascii_uppercase, coors))
+        return dict(zip(
+            candidate_names(n),
+            self.sampler.sample(n=self.candidates)
+        ))
 
     def samples_to_votes(self,
                          sample: Iterable[Tuple[float, ...]],
@@ -275,8 +274,8 @@ class ScoreSpaceGenerator:
     uses the underlying sampler to produce candidate scorings directly.
     The candidate scores are independent of each other.
 
-    Under default settings, this generator produces the *Impartial Anonymous
-    Culture* (IAC). By providing different settings for different dimensions
+    Under default settings, this generator produces the *Impartial Culture*
+    (IC). By providing different settings for different dimensions
     of the passed sampler, score probabilities for individual candidates
     can be set. An example for two candidates, in which A will, on average,
     get higher scores (mean 0.7) than B (mean 0.3)::
@@ -338,3 +337,9 @@ def _create_sampler(sampler: Union[str, Sampler], n_dims: Union[int, None]):
         return sampler
     else:
         return DistributionSampler(distribution=sampler, n_dims=n_dims)
+
+
+def candidate_names(n: int) -> List[str]:
+    if n > 26:
+        raise NotImplementedError
+    return list(string.ascii_uppercase[:n])
