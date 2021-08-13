@@ -701,13 +701,19 @@ class Benham:
     '''
     CONDO = votelib.evaluate.condorcet.CondorcetWinner()
 
-    def evaluate(self, votes: Dict[RankedVoteType, int]) -> List[Candidate]:
+    def evaluate(self,
+                 votes: Dict[RankedVoteType, int],
+                 n_seats: int = 1) -> List[Candidate]:
+        assert n_seats == 1
         current_votes = votes
         condowin = self.get_condorcet_winner(current_votes)
         while condowin is None:
             remains = eliminate_one(current_votes)
-            current_votes = RANKED_SUBSETTER.convert(votes, remains)
-            condowin = self.get_condorcet_winner(current_votes)
+            if len(remains) == 1:
+                return remains
+            else:
+                current_votes = RANKED_SUBSETTER.convert(votes, remains)
+                condowin = self.get_condorcet_winner(current_votes)
         return [condowin]
 
     def get_condorcet_winner(self,
