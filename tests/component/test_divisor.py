@@ -8,6 +8,7 @@ import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 import votelib.component.divisor as d
+import votelib.evaluate.proportional
 
 TEST_ORDERS = list(range(10)) + [100, 1000, 10000]
 
@@ -46,3 +47,12 @@ def test_construct():
     def own_divf(ord):
         return ord + 2
     assert d.construct(own_divf) == own_divf
+
+
+def test_modified_first_coef_default():
+    evaluator = votelib.evaluate.proportional.HighestAverages(
+        divisor_function=d.modified_first_coef(
+            d.sainte_lague
+        )
+    )
+    result = evaluator.evaluate({"muncip1": 20, "muncip2": 10}, 20)
