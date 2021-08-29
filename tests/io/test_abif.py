@@ -40,13 +40,13 @@ FILES_EXPECTED = {
         frozenset([('Doña García Márquez', 2), ('Steven B. Jensen', 1), ('Sue Ye (蘇業)', 5), ('Adam Muñoz', 2)]): 24,
         frozenset([('Doña García Márquez', 1), ('Steven B. Jensen', 0), ('Sue Ye (蘇業)', 3), ('Adam Muñoz', 5)]): 23,
     },
-    'test007': nonascii_result('Sue Ye (蘇業)'),
-    'test008': nonascii_result('蘇業'),
+    'test012': nonascii_result('Sue Ye (蘇業)'),
+    'test013': nonascii_result('蘇業'),
 }
 FILES_EXPECTED['test003'] = FILES_EXPECTED['test001']
-FILES_EXPECTED['test005'] = FILES_EXPECTED['test004']
-FILES_EXPECTED['test006'] = FILES_EXPECTED['test004']
-FILES_EXPECTED['test009'] = FILES_EXPECTED['test004']
+FILES_EXPECTED['test010'] = FILES_EXPECTED['test004']
+FILES_EXPECTED['test011'] = FILES_EXPECTED['test004']
+FILES_EXPECTED['test014'] = FILES_EXPECTED['test004']
 
 FAILS = [
     ': A>B',    # missing ballot count number
@@ -69,6 +69,8 @@ FAILS = [
     # TODO add candidate mapping parsing errors after that part of spec is stabilized
 ]
 
+FILE_FAILS = ['test005', 'test006', 'test007', 'test008', 'test009']
+
 
 @pytest.mark.parametrize('filename, expected', list(FILES_EXPECTED.items()))
 def test_files_output(filename, expected):
@@ -87,3 +89,10 @@ def test_roundtrip(expected):
 def test_fail(abif):
     with pytest.raises(votelib.io.abif.ABIFParseError):
         result = votelib.io.abif.loads(abif)
+
+
+@pytest.mark.parametrize('filename', FILE_FAILS)
+def test_file_fail(filename):
+    with pytest.raises(votelib.io.abif.ABIFParseError):
+        with open(os.path.join(DATA_DIR, f'{filename}.abif'), 'r', encoding='utf8') as infile:
+            result = votelib.io.abif.load(infile)

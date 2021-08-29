@@ -135,8 +135,8 @@ def _load(abif_lines: Iterable[str]) -> ABIFSpecContents:
             if vote not in votes:
                 votes[vote] = 0
             votes[vote] += n
-        elif line[0] == '[':
-            shorthand, cand_string = _parse_candidate_mapping(line)
+        elif line[0] == '=':
+            shorthand, cand_string = _parse_candidate_mapping(line[1:].lstrip())
             shorthands[shorthand] = cand_string
         elif line[0] not in ('{', '#'):
             # Skip metadata, comments and empty lines, otherwise give an error.
@@ -228,8 +228,8 @@ def _get_vote_type(tokens: List[str]) -> Union[str, None]:
         return 'list'
     else:
         return None
-    
-    
+
+
 def _parse_list_tokens(tokens: List[str],
                        shorthands: Dict[str, str],
                        ) -> votelib.vote.ApprovalVoteType:
@@ -332,18 +332,20 @@ def _parse_candidate_token(token: str, shorthands: Dict[str, str]) -> str:
 
 
 def _parse_candidate_mapping(line: str) -> Tuple[str, str]:
-    fullname_match = RE_FULLNAME_TOKEN.match(line)
-    if fullname_match is None:
-        raise ABIFParseError(f'invalid candidate full name mapping line: {line!r}')
-    fullname_token = fullname_match.group(0)
-    fullname = fullname_token[1:-1]    # strip square brackets
-    restof_line = line[len(fullname_token):].lstrip()
-    if restof_line[0] != ':':
-        raise ABIFParseError(f'invalid candidate full name mapping: full name '
-                             f'token must be followed by colon, got {restof_line!r}')
-    restof_line = restof_line[1:].lstrip()
-    shorthand_match = RE_SHORTHAND_TOKEN.fullmatch(restof_line)
+    shorthand_match = RE_SHORTHAND_TOKEN.match(line)
     if shorthand_match is None:
         raise ABIFParseError(f'did not find shorthand in candidate full name'
-                             f'mapping line: {restof_line!r}')
-    return shorthand_match.group(0), fullname
+                             f'mapping line: {line!r}')
+    shorthand = shorthand_match.group(0)
+    restof_line = line[len(shorthand):].lstrip()
+    if restof_line[0] != ':':
+        raise ABIFParseError(f'invalid candidate full name mapping: shorthand '
+                             f'token must be followed by colon, got {restof_line!r}')
+    restof_line = restof_line[1:].lstrip()
+    fullname_match = RE_FULLNAME_TOKEN.fullmatch(restof_line)
+    if fullname_match is None:
+        raise ABIFParseError(f'did not find bracketed candidate full name'
+                             f'in mapping line: {restof_line!r}')
+    fullname_token = fullname_match.group(0)
+    fullname = fullname_token[1:-1]    # strip square brackets
+    return shorthand, fullname

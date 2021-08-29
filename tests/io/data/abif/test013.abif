@@ -1,0 +1,14 @@
+# Case 13 - Mixed bracketed candidate tokens. Ranked, no score. Sans whitespace.
+#
+# 2021-06-18 - Replacement for case #8, using the new syntax described in
+# 	       ABIF issue #8 (<https://github.com/electorama/abif/issues/8>)
+
+=DGM:[Doña García Márquez]
+=SBJ:[Steven B. Jensen]
+=SY:[Sue Ye (蘇業)]
+=AM:[Adam Muñoz]
+
+27:DGM>SBJ>[蘇業]>AM
+26:SBJ>DGM=[蘇業]>AM
+24:[蘇業]>DGM=AM>SBJ
+23:AM>[蘇業]>DGM>SBJ
