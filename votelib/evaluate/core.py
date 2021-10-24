@@ -338,6 +338,103 @@ class MultistageDistributor:
 
 
 @simple_serialization
+class UnusedVotesDistributor(MultistageDistributor):
+    def __init__(self,
+                 rounds: List[Distributor],
+                 quota_functions: Optional[List[Union[str, Callable[[int, int], Number]]]] = None,
+                 depth: int = 1,
+                 ):
+        self.rounds = rounds
+        if quota_functions is None:
+            quota_functions = [round.quota_function for round in rounds[:-1]]
+        self.quota_functions = [
+            votelib.component.quota.construct(quota_def)
+            for quota_def in quota_functions
+        ]
+        self.depth = depth
+
+    def evaluate(self,
+                 votes: Dict[Candidate, int],
+                 n_seats: int,
+                 prev_gains: Dict[Candidate, int] = {},
+                 max_seats: Dict[Candidate, int] = {},
+                 ) -> Dict[Candidate, int]:
+        elected = prev_gains.copy()
+        if max_seats:
+            raise NotImplementedError('max_seats not supported')
+        for stage, quota_fx in zip(self.rounds, self.quota_functions + [None]):
+            stage_res = stage.evaluate(votes, n_seats)
+            self._add_stage_results(elected, stage_res, self.depth)
+            if quota_fx is not None:    # if we have more steps to go
+                votes = self._use_votes(
+                    votes, stage_res, n_seats, quota_fx, depth=self.depth
+                )
+                n_seats = self._subtract_gained_seats(
+                    n_seats, stage_res, depth=self.depth
+                )
+        return elected
+
+    @classmethod
+    def _use_votes(cls,
+                   votes: Dict[Candidate, int],
+                   elected: Dict[Candidate, int],
+                   n_seats: int,
+                   quota_fx: Callable[[int, int], Number],
+                   depth: int = 1,
+                   ) -> Dict[Candidate, int]:
+        if depth == 1:
+            quota_val = quota_fx(sum(votes.values()), n_seats)
+            # TODO error out if simple subtraction would produce negatives
+            return {
+                cand: max(n_votes - quota_val * elected.get(cand, 0), 0)
+                for cand, n_votes in votes.items()
+            }
+        else:
+            if not isinstance(n_seats, dict):
+                n_seats = collections.defaultdict(lambda: n_seats)
+            return {
+                constituency: cls._use_votes(
+                    con_votes,
+                    elected.get(constituency, {}),
+                    n_seats.get(constituency, 0),
+                    quota_fx=quota_fx,
+                    depth=depth - 1
+                )
+                for constituency, con_votes in votes.items()
+            }
+
+    @classmethod
+    def _subtract_gained_seats(cls,
+                               n_seats: Union[int, Dict[Candidate, int]],
+                               elected: Dict[Candidate, int],
+                               depth: int = 1,
+                               ) -> Union[int, Dict[Candidate, int]]:
+        if isinstance(n_seats, dict):
+            return {
+                constituency: cls._subtract_gained_seats(
+                    con_n_seats, elected.get(constituency, {}), depth=depth - 1
+                )
+                for constituency, con_n_seats in n_seats.items()
+            }
+        else:
+            return n_seats - cls._gained_seats(elected, depth=depth)
+
+    @classmethod
+    def _gained_seats(cls,
+                      elected: Dict[Any, Dict[Any, Any]],
+                      depth: int = 1,
+                      ) -> int:
+        if depth == 1:
+            return sum(elected.values())
+        else:
+            return sum(
+                cls._gained_seats(val, depth=depth - 1)
+                for val in elected.values()
+            )
+
+
+
+@simple_serialization
 class AdjustedSeatCount:
     '''Distribute an adjusted total number of seats according to votes cast.
 
@@ -616,7 +713,7 @@ class PostConverted:
         self.evaluator = evaluator
         self.converter = converter
 
-    def evaluate(self, votes, n_seats=None, *args, **kwargs):
+    def evaluate(self, votes, *args, **kwargs):
         '''Run the evaluator and return its result, converted.
 
         All other arguments are passed through to the evaluator.
@@ -625,7 +722,7 @@ class PostConverted:
         :param n_seats: Number of seats to allocate by the evaluator.
         '''
         return self.converter.convert(
-            self.evaluator.evaluate(votes, n_seats, *args, **kwargs)
+            self.evaluator.evaluate(votes, *args, **kwargs)
         )
 
 
@@ -682,12 +779,14 @@ class Conditioned:
                  eliminator: SeatlessSelector,
                  evaluator: Evaluator,
                  subsetter: Optional[votelib.vote.SimpleSubsetter] = None,
+                 depth: bool = True,
                  ):
         self.eliminator = eliminator
         self.evaluator = evaluator
         if subsetter is None:
             subsetter = DEFAULT_SUBSETTER
         self.subsetter = subsetter
+        self.depth = depth
 
     def evaluate(self,
                  votes: Dict[Any, int],
@@ -705,15 +804,15 @@ class Conditioned:
             evaluator and eliminator, if they accept them (as determined by
             the `accepts_seats` function).
         '''
+        summed_votes = self._sum_party_votes(votes, depth=self.depth)
+        summed_prev_gains = self._sum_party_votes(prev_gains, depth=self.depth)
         if accepts_prev_gains(self.eliminator):
             not_eliminated = self.eliminator.evaluate(
-                votes, prev_gains=prev_gains
+                summed_votes, prev_gains=summed_prev_gains
             )
         else:
-            not_eliminated = self.eliminator.evaluate(votes)
-        elim_votes = votelib.convert.SubsettedVotes(self.subsetter).convert(
-            votes, not_eliminated
-        )
+            not_eliminated = self.eliminator.evaluate(summed_votes)
+        elim_votes = self._elim_party_votes(votes, not_eliminated, depth=self.depth)
         if accepts_prev_gains(self.evaluator):
             kwargs = kwargs.copy()
             kwargs['prev_gains'] = prev_gains
@@ -723,6 +822,35 @@ class Conditioned:
             )
         else:
             return self.evaluator.evaluate(elim_votes, **kwargs)
+
+    def _sum_party_votes(cls,
+                         values: Dict[Any, Dict[Any, Any]],
+                         depth: int = 1,
+                         ) -> Dict[Candidate, Any]:
+        if depth == 1:
+            return values
+        else:
+            return votelib.convert.VoteTotals().convert({
+                key: cls._sum_party_votes(val, depth=depth - 1)
+                for key, val in values.items()
+            })
+
+    def _elim_party_votes(self,
+                          votes: Dict[Any, Dict[Any, Any]],
+                          not_eliminated: List[Candidate],
+                          depth: int = 1,
+                          ) -> Dict[Candidate, Any]:
+        if depth == 1:
+            return votelib.convert.SubsettedVotes(self.subsetter).convert(
+                votes, not_eliminated
+            )
+        else:
+            return {
+                key: self._elim_party_votes(
+                    val, not_eliminated, depth=depth - 1
+                )
+                for key, val in votes.items()
+            }
 
 
 @simple_serialization
@@ -859,6 +987,55 @@ class ByConstituency:
                 return self.preselector.evaluate(nat_votes)
         else:
             return None
+
+
+class PreApportioned:
+    def __init__(self,
+                 evaluator: Distributor,
+                 apportioner: Union[Distributor, Dict[Constituency, int], int],
+                 ):
+        self.evaluator = evaluator
+        self.apportioner = apportioner
+
+    def evaluate(self,
+                 votes: Dict[Constituency, Dict[Any, int]],
+                 n_seats: Union[int, Dict[Constituency, int], None] = None,
+                 prev_gains: Dict[Constituency, Dict[Candidate, int]] = {},
+                 max_seats: Dict[Constituency, Dict[Candidate, int]] = {},
+                 ) -> Union[
+                     Dict[Constituency, Dict[Candidate, int]],
+                     Dict[Constituency, List[Candidate]],
+                 ]:
+        apportionment = apportion(
+            votes, n_seats, apportioner=self.apportioner
+        )
+        return self.evaluator.evaluate(
+            votes,
+            n_seats=apportionment,
+            prev_gains=prev_gains,
+            max_seats=max_seats,
+        )
+
+
+class RemovedApportionment:
+    def __init__(self, evaluator: Distributor):
+        self.evaluator = evaluator
+
+    def evaluate(self,
+                 votes: Dict[Constituency, Dict[Any, int]],
+                 n_seats: Union[int, Dict[Constituency, int], None] = None,
+                 prev_gains: Dict[Constituency, Dict[Candidate, int]] = {},
+                 max_seats: Dict[Constituency, Dict[Candidate, int]] = {},
+                 ) -> Union[
+                     Dict[Constituency, Dict[Candidate, int]],
+                     Dict[Constituency, List[Candidate]],
+                 ]:
+        return self.evaluator.evaluate(
+            votes,
+            n_seats=sum(n_seats.values()),
+            prev_gains=prev_gains,
+            max_seats=max_seats,
+        )
 
 
 @simple_serialization
