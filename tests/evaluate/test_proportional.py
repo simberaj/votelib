@@ -4,9 +4,43 @@ import os
 import decimal
 from fractions import Fraction
 
+import pytest
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 import votelib.evaluate.core
 import votelib.evaluate.proportional
+
+
+CZ_PSP_PK_2021_VOTES = {
+    'ANO': 73556,
+    'PirSTAN': 38628,
+    'Spolu': 78163,
+    'SPD': 25673,
+}
+
+def test_imperiali_overaward_ignore():
+    imperiali = votelib.evaluate.proportional.LargestRemainder('imperiali', on_overaward='ignore')
+    result = imperiali.evaluate(CZ_PSP_PK_2021_VOTES, 10)
+    assert result == {'ANO': 4, 'PirSTAN': 2, 'Spolu': 4, 'SPD': 1}
+
+
+def test_imperiali_overaward_ignore():
+    imperiali = votelib.evaluate.proportional.LargestRemainder('imperiali', on_overaward='error')
+    with pytest.raises(votelib.evaluate.core.VotingSystemError):
+        result = imperiali.evaluate(CZ_PSP_PK_2021_VOTES, 10)
+
+
+def test_imperiali_overaward_subtract():
+    # https://volby.cz/pls/ps2021/ps55?xjazyk=CZ
+    imperiali = votelib.evaluate.proportional.LargestRemainder('imperiali', on_overaward='subtract')
+    result = imperiali.evaluate(CZ_PSP_PK_2021_VOTES, 10)
+    assert result == {'ANO': 3, 'PirSTAN': 2, 'Spolu': 4, 'SPD': 1}
+
+
+def test_imperiali_overaward_subtract_tied():
+    imperiali = votelib.evaluate.proportional.LargestRemainder('imperiali', on_overaward='subtract')
+    result = imperiali.evaluate({'A': 200, 'B': 400, 'C': 200}, 2)
+    assert result == {'B': 1, votelib.evaluate.core.Tie(['A', 'B', 'C']): 1}
 
 
 def test_max_seats_highav():
