@@ -655,7 +655,8 @@ class MergedSelections:
             key=(lambda cand: (-len(ranks[cand]), -sum(ranks[cand])))
         ))
 
-    def _get_ranks(self, elected: Iterable[List[Candidate]]):
+    @staticmethod
+    def _get_ranks(elected: Iterable[List[Candidate]]):
         ranks = {}
         for clist in elected:
             max_rank = len(clist) - 1
@@ -943,7 +944,6 @@ class Chain:
 
     Applies the converters successively on a single vote dictionary.
     """
-
     def __init__(self, converters: List[Converter]):
         self.converters = converters
 

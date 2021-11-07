@@ -233,7 +233,8 @@ class QuotaDistributor:
             if fulfills_quota:
                 n_add_seats = int(Fraction(n_votes, quota_val)) - n_prev
                 if n_add_seats > 0:
-                    if n_add_seats + n_prev > max_seats.get(candidate, n_seats):
+                    cand_max_seats = max_seats.get(candidate, n_seats)
+                    if n_add_seats + n_prev > cand_max_seats:
                         overshoot = n_add_seats + n_prev
                         n_add_seats -= overshoot
                         n_overshot += overshoot
@@ -265,8 +266,7 @@ class QuotaDistributor:
                 )
             elif self.on_overaward == 'subtract':
                 return self._subtract_overaward(
-                    votes, selected, n_seats,
-                    prev_gains=prev_gains, max_seats=max_seats
+                    votes, selected, n_seats, prev_gains=prev_gains
                 )
             else:
                 raise ValueError
@@ -277,7 +277,6 @@ class QuotaDistributor:
                             selected: Dict[Candidate, int],
                             n_seats: int,
                             prev_gains: Dict[Candidate, int] = {},
-                            max_seats: Dict[Candidate, int] = {},
                             ) -> Dict[Candidate, int]:
         overaward = sum(selected.values()) + sum(prev_gains.values()) - n_seats
         quota_val = self.quota_function(
@@ -632,8 +631,8 @@ class BiproportionalEvaluator:
                 for party in parties_labeled:
                     party_coefs[party] /= adj_coef
 
-    def _augment_result(self,
-                        result: Dict[Constituency, Dict[Candidate, int]],
+    @staticmethod
+    def _augment_result(result: Dict[Constituency, Dict[Candidate, int]],
                         districts_labeled: Dict[Constituency, Set[Candidate]],
                         parties_labeled: Dict[Candidate, Set[Constituency]],
                         start_district: Constituency,
@@ -772,13 +771,14 @@ class BiproportionalEvaluator:
             and n_seats >= 1
         )
 
-    def _calc_quots(self,
-                    votes: Dict[Constituency, Dict[Candidate, int]],
+    @staticmethod
+    def _calc_quots(votes: Dict[Constituency, Dict[Candidate, int]],
                     district_coefs: Dict[Constituency, int],
                     party_coefs: Dict[Candidate, Fraction],
                     ) -> Dict[Constituency, Dict[Candidate, Fraction]]:
-        '''Calculate fractional seat count apporximators from vote counts
-        and coefficients (inverse divisors) in both dimensions.
+        '''Calculate fractional seat count approximators in both dimensions.
+
+        Calculates from vote counts and coefficients (inverse divisors).
         '''
         return {
             district: {
@@ -788,8 +788,8 @@ class BiproportionalEvaluator:
             for district, district_votes in votes.items()
         }
 
-    def _districts_unsat(self,
-                         cur_district_seats: Dict[Constituency, int],
+    @staticmethod
+    def _districts_unsat(cur_district_seats: Dict[Constituency, int],
                          tgt_district_seats: Dict[Constituency, int],
                          ) -> Tuple[List[Constituency], List[Constituency]]:
         '''Return districts with less and more seats than needed, respectively.
