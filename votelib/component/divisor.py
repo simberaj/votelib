@@ -119,6 +119,8 @@ def modified_first_coef(divisor_fx: Callable[[int], Number],
         the first order and subsequent ones.
     :param first_coef: The coefficient to be used when order == 0.
     '''
+    if not isinstance(first_coef, (int, Fraction)):
+        first_coef = Fraction(*first_coef.as_integer_ratio())
     def _modified_divisor(order: int) -> Number:
         return divisor_fx(order) if order > 0 else first_coef
     return _modified_divisor
