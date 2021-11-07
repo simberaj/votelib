@@ -20,7 +20,6 @@ assigned arbitrary additional properties, so they, too, can be used.
 from __future__ import annotations
 
 import abc
-import collections
 from typing import Any, List, Optional, Union, Dict
 
 from votelib.persist import simple_serialization

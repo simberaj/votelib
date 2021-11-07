@@ -9,7 +9,7 @@ import collections
 import bisect
 import random
 from fractions import Fraction
-from typing import Any, List, Tuple, Dict, Union, Iterable
+from typing import Any, List, Tuple, Dict, Iterable
 from numbers import Number
 
 from votelib.vote import RankedVoteType

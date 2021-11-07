@@ -22,12 +22,15 @@ import votelib.evaluate.condorcet
 from votelib.candidate import Candidate
 from votelib.vote import RankedVoteType
 from votelib.persist import simple_serialization
+from votelib.component.transfer import VoteTransferer
 
 RankedVoteAllocation = votelib.component.transfer.RankedVoteAllocation
 
 INF = float('inf')
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_TRANSFERER = votelib.component.transfer.Gregory()
 
 
 @simple_serialization
@@ -89,9 +92,7 @@ class TransferableVoteDistributor:
         of reaching the quota.
     '''
     def __init__(self,
-                 transferer: Union[
-                     str, votelib.component.transfer.VoteTransferer
-                 ] = 'Gregory',
+                 transferer: Union[str, VoteTransferer] = DEFAULT_TRANSFERER,
                  retainer: Optional[votelib.evaluate.core.Selector] = None,
                  eliminate_step: Optional[int] = -1,
                  quota_function: Union[
@@ -346,8 +347,7 @@ class TransferableVoteDistributor:
 
 
 def initial_allocation(votes: Dict[RankedVoteType, Number],
-                       transferer: votelib.component.transfer.VoteTransferer =
-                           votelib.component.transfer.Gregory(),
+                       transferer: VoteTransferer = DEFAULT_TRANSFERER,
                        ) -> RankedVoteAllocation:
     '''Allocate votes by first preference.
 

@@ -20,8 +20,9 @@ import votelib.candidate
 import votelib.util
 import votelib.vote
 from votelib.candidate import \
-    Candidate, Constituency, IndividualElectionOption, ElectionParty
-from votelib.vote import RankedVoteType, ScoreVoteType
+    Candidate, Constituency, IndividualElectionOption, ElectionParty, \
+    IndividualToPartyMapper
+from votelib.vote import RankedVoteType, ScoreVoteType, VoteSubsetter
 from votelib.component import rankscore
 from votelib.persist import simple_serialization
 
@@ -530,11 +531,9 @@ class IndividualToPartyVotes:
     :param mapper: A mapper object specifying the mapping from individuals to
         parties.
     '''
-    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
+    DEFAULT_MAPPER = IndividualToPartyMapper()
 
-    def __init__(self,
-                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
-                 ):
+    def __init__(self, mapper: IndividualToPartyMapper = DEFAULT_MAPPER):
         self.mapper = mapper
 
     def convert(self,
@@ -544,7 +543,7 @@ class IndividualToPartyVotes:
         aggregated = collections.defaultdict(int)
         for cand, n in votes.items():
             party = self.mapper(cand)
-            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
+            if party is not IndividualToPartyMapper.IGNORE:
                 aggregated[party] += n
         return dict(aggregated)
 
@@ -562,11 +561,9 @@ class IndividualToPartyResult:
     :param mapper: A mapper object specifying the mapping from individuals to
         parties.
     '''
-    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
+    DEFAULT_MAPPER = IndividualToPartyMapper()
 
-    def __init__(self,
-                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
-                 ):
+    def __init__(self, mapper: IndividualToPartyMapper = DEFAULT_MAPPER):
         self.mapper = mapper
 
     def convert(self,
@@ -576,7 +573,7 @@ class IndividualToPartyResult:
         aggregated = collections.defaultdict(int)
         for cand in results:
             party = self.mapper(cand)
-            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
+            if party is not IndividualToPartyMapper.IGNORE:
                 aggregated[party] += 1
         return dict(aggregated)
 
@@ -594,11 +591,9 @@ class GroupVotesByParty:
         parties.
     '''
 
-    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
+    DEFAULT_MAPPER = IndividualToPartyMapper()
 
-    def __init__(self,
-                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
-                 ):
+    def __init__(self, mapper: IndividualToPartyMapper = DEFAULT_MAPPER):
         self.mapper = mapper
 
     def convert(self,
@@ -608,7 +603,7 @@ class GroupVotesByParty:
         aggregated = {}
         for cand, n in votes.items():
             party = self.mapper(cand)
-            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
+            if party is not IndividualToPartyMapper.IGNORE:
                 aggregated.setdefault(party, {})[cand] = n
         return aggregated
 
@@ -885,7 +880,7 @@ class RoundedVotes:
 class SubsettedVotes:
     '''Subset the votes to only concern a subset of candidates.
 
-    A wrapper over :class:`vote.VoteSubsetter` that takes the entire vote count
+    A wrapper over :class:`VoteSubsetter` that takes the entire vote count
     dictionary, not just a single vote object (key).
     Useful when some candidates should be excluded because they do not pass
     an electoral threshold, or when evaluating ties.
@@ -897,7 +892,7 @@ class SubsettedVotes:
     DEFAULT_SUBSETTER = votelib.vote.SimpleSubsetter()
 
     def __init__(self,
-                 vote_subsetter: votelib.vote.VoteSubsetter = DEFAULT_SUBSETTER,
+                 vote_subsetter: VoteSubsetter = DEFAULT_SUBSETTER,
                  depth: int = 0,
                  ):
         self.vote_subsetter = vote_subsetter

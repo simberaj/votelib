@@ -1,4 +1,4 @@
-"""
+"""Generate votes for voting system simulations.
 
 The generators implemented here mostly produce score votes since those are
 the most general type. For other types, convert the result using converters:
@@ -48,9 +48,9 @@ class DistributionSampler(Sampler):
     the names of the generating functions.
 
     The outputs from this sampler need to be fed into
-    :class:`IssueSpaceGenerator` to produce votes or specify candidate positions
-    or into :class:`ScoreSpaceGenerator` to be converted to candidate scorings
-    directly.
+    :class:`IssueSpaceGenerator` to produce votes or specify candidate
+    positions or into :class:`ScoreSpaceGenerator` to be converted to candidate
+    scorings directly.
 
     Any superfluous keyword arguments are passed to the generating function
     from the random module. If no keyword arguments are given but are required
@@ -82,8 +82,10 @@ class DistributionSampler(Sampler):
                 if n_dims is None:
                     n_dims = len(argval)
                 elif len(argval) != n_dims:
-                    raise ValueError(f'sampling {argname} parameter has'
-                                     f'{len(argval)} dimensions, expected {n_dims}')
+                    raise ValueError(
+                        f'sampling {argname} parameter has'
+                        f'{len(argval)} dimensions, expected {n_dims}'
+                    )
             elif isinstance(argval, Number) and n_dims is not None:
                 kwargs[argname] = tuple([argval] * n_dims)
         self.n_dims = n_dims
@@ -99,7 +101,7 @@ class DistributionSampler(Sampler):
                n: int,
                n_dims: Optional[int] = None,
                ) -> Iterable[Tuple[float, ...]]:
-        """A generator to sample n issue space samples from the distribution."""
+        """Sample n issue space samples from the distribution."""
         if self.n_dims is None:
             if n_dims is None:
                 raise ValueError('need n_dims arg when not set on instance')
@@ -121,17 +123,17 @@ class BoundedSampler(Sampler):
     a specified multidimensional bounding box. Useful e.g. for the generation
     of Yee diagrams.
 
-    The outputs from this sampler need to be fed into :class:`SamplingGenerator`
-    to produce votes or specify candidate positions.
+    The outputs from this sampler need to be fed into
+    :class:`SamplingGenerator` to produce votes or specify candidate positions.
 
     :param inner: A sampler (e.g. :class:`DistributionSampler`) to wrap.
         Its samples are filtered by the specified bounding box.
     :param bbox: The bounding box to restrict the samples to. First, all
-        minima per dimension are specified, then all maxima; for two dimensions,
-        this would be ``(minx, miny, maxx, maxy)``. If the inner sampler has
-        a defined number of dimensions, it is also possible to specify only
-        two numbers, which will be interpreted as the minimum and maximum
-        in each dimension.
+        minima per dimension are specified, then all maxima; for two
+        dimensions, this would be ``(minx, miny, maxx, maxy)``. If the inner
+        sampler has a defined number of dimensions, it is also possible
+        to specify only two numbers, which will be interpreted as the minimum
+        and maximum in each dimension.
     """
     def __init__(self, inner: Sampler, bbox: Tuple[Number, ...]):
         self.inner = inner
@@ -182,11 +184,12 @@ class IssueSpaceGenerator:
         candidate positions will be sampled in the same way the voters are.
     :param sampler: How to sample the voter points. Either an object with a
         ``sample()`` method that yields numerical tuples with the correct
-        number of dimensions (such as instances of :class:`Sampler` subclasses),
-        or a string referencing a name of a statistical distribution; in that
-        case, :class:`DistributionSampler` will be invoked in two dimensions
-        with default settings on the specified distribution. See the class
-        documentation for more on supported distributions.
+        number of dimensions (such as instances of :class:`Sampler`
+        subclasses), or a string referencing a name of a statistical
+        distribution; in that case, :class:`DistributionSampler` will be
+        invoked in two dimensions with default settings on the specified
+        distribution. See the class documentation for more on supported
+        distributions.
     :param vote_creation: How to transform voter-to-candidate proximities
         in the issue space to score votes:
 
@@ -195,6 +198,7 @@ class IssueSpaceGenerator:
         -   ``closest``: The closest candidate is voted for. Simple votes are
             produced.
         -   Other transformations are not implemented.
+
     :param random_state: Seed for the sampler.
     """
     def __init__(self,
@@ -294,11 +298,11 @@ class ScoreSpaceGenerator:
         uppercase ASCII letters (A, B, C...).
     :param sampler: How to sample the scores. Either an object with a
         ``sample()`` method that yields numerical tuples with the correct
-        number of dimensions (such as instances of :class:`Sampler` subclasses),
-        or a string referencing a name of a statistical distribution; in that
-        case, :class:`DistributionSampler` will be invoked
-        with default settings on the specified distribution. See the class
-        documentation for more on supported distributions.
+        number of dimensions (such as instances of :class:`Sampler`
+        subclasses), or a string referencing a name of a statistical
+        distribution; in that case, :class:`DistributionSampler` will be
+        invoked with default settings on the specified distribution.
+        See the class documentation for more on supported distributions.
     :param round_scores: Whether to round the scores (using round half to even)
         to integers.
     :param random_state: Seed for the sampler.
