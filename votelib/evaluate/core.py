@@ -779,7 +779,7 @@ class Conditioned:
                  eliminator: SeatlessSelector,
                  evaluator: Evaluator,
                  subsetter: Optional[votelib.vote.SimpleSubsetter] = None,
-                 depth: bool = True,
+                 depth: int = 1,
                  ):
         self.eliminator = eliminator
         self.evaluator = evaluator
