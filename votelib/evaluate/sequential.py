@@ -13,6 +13,7 @@ from fractions import Fraction
 from typing import Any, List, Dict, Tuple, Union, Callable, Optional
 from numbers import Number
 
+import votelib.convert
 import votelib.persist
 import votelib.util
 import votelib.component.quota
@@ -23,6 +24,7 @@ from votelib.candidate import Candidate
 from votelib.vote import RankedVoteType
 from votelib.persist import simple_serialization
 from votelib.component.transfer import VoteTransferer
+from votelib.evaluate.condorcet import SeatlessSelector, SmithSet
 
 RankedVoteAllocation = votelib.component.transfer.RankedVoteAllocation
 
@@ -641,8 +643,7 @@ class TidemanAlternative:
         http://www.votingmatters.org.uk/ISSUE29/I29P1.pdf
     '''
     def __init__(self,
-                 set_selector: votelib.evaluate.condorcet.SeatlessSelector =
-                     votelib.evaluate.condorcet.SmithSet(),
+                 set_selector: SeatlessSelector = SmithSet(),
                  ):
         self.set_selector = set_selector
 
