@@ -11,7 +11,8 @@ Votelib API reference
    
    api_docs/api_evaluate
    api_docs/api_convert
-   api_docs/api_measure
+   api_docs/api_crit
+   api_docs/api_generate
    api_docs/api_candidate
    api_docs/api_vote
    api_docs/api_component
