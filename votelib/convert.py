@@ -20,8 +20,9 @@ import votelib.candidate
 import votelib.util
 import votelib.vote
 from votelib.candidate import \
-    Candidate, Constituency, IndividualElectionOption, ElectionParty
-from votelib.vote import RankedVoteType, ScoreVoteType
+    Candidate, Constituency, IndividualElectionOption, ElectionParty, \
+    IndividualToPartyMapper
+from votelib.vote import RankedVoteType, ScoreVoteType, VoteSubsetter
 from votelib.component import rankscore
 from votelib.persist import simple_serialization
 
@@ -84,9 +85,9 @@ class ScoreToSimpleVotes:
     '''Aggregate scores (cardinal votes) to simple votes.
 
     Useful for score voting (range voting) systems. Note that, if the usual
-    central value function such as mean or median are used, this does not
+    central value functions such as mean or median are used, this does not
     give scores that could be passed to ordinary magnitude-based evaluators
-    since they do not scale with the number of voters.
+    since mean/median scores do not scale with the number of voters.
 
     This can be used directly in combination with a simple-vote plurality
     evaluator but is also a component in several cardinal vote evaluators.
@@ -108,11 +109,13 @@ class ScoreToSimpleVotes:
         specified by their names.
     :param min_count: Minimum count of voter scores for the candidate to be
         considered. Candidates below this threshold will be assigned
-        bottom_value.
+        bottom_value. This is used in some systems to prevent an unknown
+        upset candidate to win by high score mean although they were scored
+        only by a handful of highly dedicated voters.
     :param truncation: Fraction (if lower than 1) or count (if at least 1)
         of lowest and highest scores to disregard before aggregating, to
         stabilize the result. (Both ends are trimmed using this, so the
-        number/fraction of scores disregarded is twice the count/fraction).
+        number/fraction of scores disregarded is twice the count/fraction.)
     :param bottom_value: Value to assign to candidates with less voter scores
         than min_count. This would usually be the lowest possible aggregate
         score.
@@ -268,10 +271,29 @@ class RankedToFirstPreference:
 
 
 @simple_serialization
+class RankedToFirstNPreferences:
+    '''Aggregate ranked votes to approval votes, taking first N choices.
+
+    :param n_first: Number of top choices to take from each ballot.
+    '''
+    def __init__(self, n_first: int):
+        self.n_first = n_first
+
+    def convert(self,
+                votes: Dict[RankedVoteType, int],
+                ) -> Dict[Candidate, int]:
+        output = collections.defaultdict(int)
+        for ranking, n_votes in votes.items():
+            if ranking:
+                output[frozenset(ranking[:self.n_first])] += n_votes
+        return dict(output)
+
+
+@simple_serialization
 class RankedToPresenceCounts:
     '''Count candidate occurrences in ranked votes regardless of rank.
 
-    Returns simple votes. The candidates will be ordered in the order of the
+    Returns simple votes. The dictionary will be ordered in the order of the
     ranked votes - first, all candidates appearing on any first rank will be
     listed in the order of their first such votes, then all candidates
     that appear on second and lower ranks only, etc.
@@ -313,7 +335,8 @@ class RankedToPositionalVotes:
     '''Aggregate ranked votes to simple votes.
 
     Useful for Borda count systems. Assigns a score to each rank and then
-    sums the scores.
+    sums the scores. The complete Borda count system is obtained by coupling
+    this converter with the Plurality evaluator.
 
     :param rank_scorer: A rank scorer that determines which score to assign to
         which rank through its `scores()` method.
@@ -434,10 +457,11 @@ class ScoreToRankedVotes:
         all_candidates = frozenset(
             cand for vote, n_votes in votes.items() for cand, score in vote
         )
-        return {
-            self.convert_one(vote, all_candidates): n_votes
-            for vote, n_votes in votes.items()
-        }
+        output = collections.defaultdict(int)
+        for scored, n_votes in votes.items():
+            ranked = self.convert_one(scored, all_candidates)
+            output[ranked] += n_votes
+        return dict(output)
 
     def convert_one(self,
                     vote: ScoreVoteType,
@@ -457,6 +481,29 @@ class ScoreToRankedVotes:
             else:
                 ranked.append(frozenset(t[0] for t in tuples))
         return tuple(reversed(ranked))
+
+
+@simple_serialization
+class ScoreToApprovalVotesThreshold:
+    '''Convert score votes to approval votes by a score approval threshold.
+
+    Only approves candidates whose score is numerically greater than or equal
+    to the specified threshold.
+    '''
+    def __init__(self, threshold: Number):
+        self.threshold = threshold
+
+    def convert(self,
+                votes: Dict[ScoreVoteType, int],
+                ) -> Dict[FrozenSet[Candidate], int]:
+        approvals = collections.defaultdict(int)
+        for vote, n_votes in votes.items():
+            approved = frozenset(
+                cand for cand, score in vote if score >= self.threshold
+            )
+            if approved:
+                approvals[approved] += n_votes
+        return dict(approvals)
 
 
 # Inverters
@@ -484,11 +531,9 @@ class IndividualToPartyVotes:
     :param mapper: A mapper object specifying the mapping from individuals to
         parties.
     '''
-    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
+    DEFAULT_MAPPER = IndividualToPartyMapper()
 
-    def __init__(self,
-                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
-                 ):
+    def __init__(self, mapper: IndividualToPartyMapper = DEFAULT_MAPPER):
         self.mapper = mapper
 
     def convert(self,
@@ -498,7 +543,7 @@ class IndividualToPartyVotes:
         aggregated = collections.defaultdict(int)
         for cand, n in votes.items():
             party = self.mapper(cand)
-            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
+            if party is not IndividualToPartyMapper.IGNORE:
                 aggregated[party] += n
         return dict(aggregated)
 
@@ -516,11 +561,9 @@ class IndividualToPartyResult:
     :param mapper: A mapper object specifying the mapping from individuals to
         parties.
     '''
-    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
+    DEFAULT_MAPPER = IndividualToPartyMapper()
 
-    def __init__(self,
-                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
-                 ):
+    def __init__(self, mapper: IndividualToPartyMapper = DEFAULT_MAPPER):
         self.mapper = mapper
 
     def convert(self,
@@ -530,7 +573,7 @@ class IndividualToPartyResult:
         aggregated = collections.defaultdict(int)
         for cand in results:
             party = self.mapper(cand)
-            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
+            if party is not IndividualToPartyMapper.IGNORE:
                 aggregated[party] += 1
         return dict(aggregated)
 
@@ -548,11 +591,9 @@ class GroupVotesByParty:
         parties.
     '''
 
-    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
+    DEFAULT_MAPPER = IndividualToPartyMapper()
 
-    def __init__(self,
-                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
-                 ):
+    def __init__(self, mapper: IndividualToPartyMapper = DEFAULT_MAPPER):
         self.mapper = mapper
 
     def convert(self,
@@ -562,7 +603,7 @@ class GroupVotesByParty:
         aggregated = {}
         for cand, n in votes.items():
             party = self.mapper(cand)
-            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
+            if party is not IndividualToPartyMapper.IGNORE:
                 aggregated.setdefault(party, {})[cand] = n
         return aggregated
 
@@ -839,7 +880,7 @@ class RoundedVotes:
 class SubsettedVotes:
     '''Subset the votes to only concern a subset of candidates.
 
-    A wrapper over :class:`vote.VoteSubsetter` that takes the entire vote count
+    A wrapper over :class:`VoteSubsetter` that takes the entire vote count
     dictionary, not just a single vote object (key).
     Useful when some candidates should be excluded because they do not pass
     an electoral threshold, or when evaluating ties.
@@ -851,7 +892,7 @@ class SubsettedVotes:
     DEFAULT_SUBSETTER = votelib.vote.SimpleSubsetter()
 
     def __init__(self,
-                 vote_subsetter: votelib.vote.VoteSubsetter = DEFAULT_SUBSETTER,
+                 vote_subsetter: VoteSubsetter = DEFAULT_SUBSETTER,
                  depth: int = 0,
                  ):
         self.vote_subsetter = vote_subsetter
@@ -894,3 +935,20 @@ RANKED_TO_SIMPLE: List[type] = [
     RankedToFirstPreference,
     RankedToPresenceCounts,
 ]
+
+
+@simple_serialization
+class Chain:
+    """Chain multiple vote converters after one another.
+
+    Applies the converters successively on a single vote dictionary.
+    """
+
+    def __init__(self, converters: List[Converter]):
+        self.converters = converters
+
+    def convert(self, votes: Dict[Any, Number]) -> Dict[Any, Number]:
+        output = votes
+        for conv in self.converters:
+            output = conv.convert(output)
+        return output

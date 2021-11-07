@@ -5,6 +5,7 @@ import os
 import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+import votelib.candidate
 import votelib.evaluate
 import votelib.evaluate.core
 import votelib.evaluate.threshold
@@ -32,7 +33,7 @@ def test_fixed_seats():
 
 def test_prop_bracketer():
     parties = [votelib.candidate.PoliticalParty(c) for c in 'ABCD']
-    parties[2].ethnic_minority = True
+    parties[2].properties['ethnic_minority'] = True
     votes = dict(zip(parties, [200, 50, 50, 100]))
     thr = votelib.evaluate.threshold.AbsoluteThreshold(75)
     brack = votelib.evaluate.threshold.PropertyBracketer('ethnic_minority',
