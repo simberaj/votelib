@@ -13,6 +13,7 @@ from fractions import Fraction
 from typing import Any, List, Dict, Tuple, Union, Callable, Optional
 from numbers import Number
 
+import votelib.convert
 import votelib.persist
 import votelib.util
 import votelib.component.quota
@@ -22,12 +23,16 @@ import votelib.evaluate.condorcet
 from votelib.candidate import Candidate
 from votelib.vote import RankedVoteType
 from votelib.persist import simple_serialization
+from votelib.component.transfer import VoteTransferer
+from votelib.evaluate.condorcet import SeatlessSelector, SmithSet
 
 RankedVoteAllocation = votelib.component.transfer.RankedVoteAllocation
 
 INF = float('inf')
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_TRANSFERER = votelib.component.transfer.Gregory()
 
 
 @simple_serialization
@@ -89,9 +94,7 @@ class TransferableVoteDistributor:
         of reaching the quota.
     '''
     def __init__(self,
-                 transferer: Union[
-                     str, votelib.component.transfer.VoteTransferer
-                 ] = 'Gregory',
+                 transferer: Union[str, VoteTransferer] = DEFAULT_TRANSFERER,
                  retainer: Optional[votelib.evaluate.core.Selector] = None,
                  eliminate_step: Optional[int] = -1,
                  quota_function: Union[
@@ -346,8 +349,7 @@ class TransferableVoteDistributor:
 
 
 def initial_allocation(votes: Dict[RankedVoteType, Number],
-                       transferer: votelib.component.transfer.VoteTransferer =
-                           votelib.component.transfer.Gregory(),
+                       transferer: VoteTransferer = DEFAULT_TRANSFERER,
                        ) -> RankedVoteAllocation:
     '''Allocate votes by first preference.
 
@@ -641,8 +643,7 @@ class TidemanAlternative:
         http://www.votingmatters.org.uk/ISSUE29/I29P1.pdf
     '''
     def __init__(self,
-                 set_selector: votelib.evaluate.condorcet.SeatlessSelector =
-                     votelib.evaluate.condorcet.SmithSet(),
+                 set_selector: SeatlessSelector = SmithSet(),
                  ):
         self.set_selector = set_selector
 
@@ -701,13 +702,19 @@ class Benham:
     '''
     CONDO = votelib.evaluate.condorcet.CondorcetWinner()
 
-    def evaluate(self, votes: Dict[RankedVoteType, int]) -> List[Candidate]:
+    def evaluate(self,
+                 votes: Dict[RankedVoteType, int],
+                 n_seats: int = 1) -> List[Candidate]:
+        assert n_seats == 1
         current_votes = votes
         condowin = self.get_condorcet_winner(current_votes)
         while condowin is None:
             remains = eliminate_one(current_votes)
-            current_votes = RANKED_SUBSETTER.convert(votes, remains)
-            condowin = self.get_condorcet_winner(current_votes)
+            if len(remains) == 1:
+                return remains
+            else:
+                current_votes = RANKED_SUBSETTER.convert(votes, remains)
+                condowin = self.get_condorcet_winner(current_votes)
         return [condowin]
 
     def get_condorcet_winner(self,

@@ -129,7 +129,7 @@ def test_cz_ep_2019():
     assert CZ_EP_EVALUATOR.evaluate(votes) == results
 
 
-CZ_PSP_EVALUATOR = votelib.evaluate.core.ByConstituency(
+CZ_PSP_EVALUATOR_2017 = votelib.evaluate.core.ByConstituency(
     votelib.evaluate.proportional.HighestAverages('d_hondt'),
     votelib.evaluate.proportional.LargestRemainder('hare'),
     preselector=votelib.evaluate.threshold.RelativeThreshold(
@@ -140,8 +140,16 @@ CZ_PSP_EVALUATOR = votelib.evaluate.core.ByConstituency(
 
 @pytest.fixture(scope='module')
 def cz_psp_2017_votes():
-    fpath = os.path.join(DATA_DIR, 'cz_psp_2017.csv')
-    with open(fpath, encoding='utf8') as infile:
+    return load_cz_psp_votes('cz_psp_2017.csv')
+
+
+@pytest.fixture(scope='module')
+def cz_psp_2021_votes():
+    return load_cz_psp_votes('cz_psp_2021.csv')
+
+
+def load_cz_psp_votes(fname):
+    with open(os.path.join(DATA_DIR, fname), encoding='utf8') as infile:
         rows = list(csv.reader(infile, delimiter=';'))
     region_names = rows[0][1:]
     votes = {region: {} for region in region_names}
@@ -151,8 +159,9 @@ def cz_psp_2017_votes():
             votes[regname][party] = int(n_votes)
     return votes
 
+
 def test_cz_psp_2017(cz_psp_2017_votes):
-    reg_results = CZ_PSP_EVALUATOR.evaluate(cz_psp_2017_votes, 200)
+    reg_results = CZ_PSP_EVALUATOR_2017.evaluate(cz_psp_2017_votes, 200)
     nat_agg = votelib.convert.VoteTotals()
     assert nat_agg.convert(reg_results) == {
         'ANO': 78,
@@ -186,6 +195,52 @@ def test_cz_psp_2017(cz_psp_2017_votes):
 def get_evaluators():
     return [
         CZ_EP_EVALUATOR,
-        CZ_PSP_EVALUATOR,
+        CZ_PSP_EVALUATOR_2017,
         get_sk_nr_evaluator(),
     ]
+
+
+CZ_PSP_EVALUATOR_2021 = votelib.evaluate.core.PreApportioned(
+    evaluator=votelib.evaluate.core.Conditioned(
+        evaluator=votelib.evaluate.core.UnusedVotesDistributor(
+            [
+                votelib.evaluate.core.ByConstituency(
+                    votelib.evaluate.proportional.QuotaDistributor(
+                        'imperiali',
+                        on_overaward='subtract'
+                    )
+                ),
+                votelib.evaluate.core.RemovedApportionment(
+                    votelib.evaluate.core.ByParty(
+                        votelib.evaluate.proportional.LargestRemainder('droop')
+                    )
+                ),
+            ],
+            quota_functions=[
+                votelib.evaluate.proportional.QuotaDistributor('imperiali').quota_function
+            ],
+            depth=2
+        ),
+        eliminator=votelib.evaluate.threshold.RelativeThreshold(
+            decimal.Decimal('.05'), accept_equal=True
+        ),
+        depth=2,
+    ),
+    apportioner=votelib.evaluate.proportional.LargestRemainder('hare'),
+)
+
+def test_cz_psp_2021(cz_psp_2021_votes):
+    reg_results = CZ_PSP_EVALUATOR_2021.evaluate(cz_psp_2021_votes, 200)
+    nat_agg = votelib.convert.VoteTotals()
+    assert nat_agg.convert(reg_results) == {
+        'ANO': 72,
+        'SPOLU': 71,
+        'Piráti+STAN': 37,
+        'SPD': 20,
+    }
+    assert reg_results['Hlavní město Praha'] == {
+        'SPOLU': 11,
+        'Piráti+STAN': 6,
+        'ANO': 5,
+        'SPD': 1,
+    }

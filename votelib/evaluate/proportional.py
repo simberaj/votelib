@@ -13,7 +13,7 @@ import collections
 import decimal
 from fractions import Fraction
 from typing import (
-    List, Tuple, Dict, Union, Callable, Optional, Set, Collection
+    Any, List, Tuple, Dict, Union, Callable, Optional, Set, Collection
 )
 from numbers import Number
 
@@ -92,7 +92,7 @@ class VotesPerSeat:
     """Award seats for each N votes cast for each candidate.
 
     This is an old and simple system that was used e.g. in pre-war Germany
-    [#wrstag]_. It divides the number of votes a pre-specified constant and
+    [#wrstag]_. It divides the number of votes by a pre-specified constant and
     rounds to give the appropriate number of seats. It is also used as an
     auxiliary evaluator in some other systems with fixed quota.
 
@@ -169,7 +169,9 @@ class QuotaDistributor:
     numbers of seats.)
 
     This is usually not a self-standing evaluator because it (except for very
-    rare cases) does not award the full number of seats.
+    rare cases) does not award the full number of seats; it is, however, used
+    in initial stages of some proportional systems, such as the Czech
+    Chamber of Deputies election.
 
     :param quota_function: A callable producing the quota threshold from the
         total number of votes and number of seats. The common quota functions
@@ -177,15 +179,28 @@ class QuotaDistributor:
         :mod:`votelib.component.quota` module.
     :param accept_equal: Whether to consider the candidate elected when
         their votes exactly equal the quota.
+    :param on_overaward: Some ill-conditioned but still used quotas, such as
+        Imperiali, may distribute more seats than the allocated total since
+        they are low. In that case, do the following:
+
+        -   ``'ignore'`` - return the result regardless,
+        -   ``'error'`` - raise a VotingSystemError,
+        -   ``'subtract'`` - subtract seats from the candidates with the
+            smallest remainder after the quota division (those that exceed the
+            quota by a lowest margin) until the total seat count is met.
     '''
     def __init__(self,
                  quota_function: Union[
                      str, Callable[[int, int], Number]
                  ] = 'droop',
                  accept_equal: bool = True,
+                 on_overaward: str = 'error',
                  ):
         self.quota_function = votelib.component.quota.construct(quota_function)
         self.accept_equal = accept_equal
+        if on_overaward not in ('ignore', 'error', 'subtract'):
+            raise ValueError(f'invalid on_overaward setting: {on_overaward}')
+        self.on_overaward = on_overaward
 
     def evaluate(self,
                  votes: Dict[Candidate, int],
@@ -203,7 +218,7 @@ class QuotaDistributor:
         :param max_seats: Maximum number of seats that the given
             candidate/party can obtain in total (including previous gains).
         '''
-        qval = self.quota_function(
+        quota_val = self.quota_function(
             sum(votes.values()), n_seats
         )
         selected = {}
@@ -212,13 +227,14 @@ class QuotaDistributor:
         for candidate, n_votes in votes.items():
             n_prev = prev_gains.get(candidate, 0)
             fulfills_quota = (
-                n_votes > qval
-                or self.accept_equal and n_votes == qval
+                n_votes > quota_val
+                or self.accept_equal and n_votes == quota_val
             )
             if fulfills_quota:
-                n_add_seats = int(Fraction(n_votes, qval)) - n_prev
+                n_add_seats = int(Fraction(n_votes, quota_val)) - n_prev
                 if n_add_seats > 0:
-                    if n_add_seats + n_prev > max_seats.get(candidate, INF):
+                    cand_max_seats = max_seats.get(candidate, n_seats)
+                    if n_add_seats + n_prev > cand_max_seats:
                         overshoot = n_add_seats + n_prev
                         n_add_seats -= overshoot
                         n_overshot += overshoot
@@ -239,10 +255,65 @@ class QuotaDistributor:
                 prev_gains=total_gained,
                 max_seats=max_seats
             ))
+        total_awarded = sum(selected.values()) + sum(prev_gains.values())
+        if total_awarded > n_seats:
+            if self.on_overaward == 'ignore':
+                return selected
+            elif self.on_overaward == 'error':
+                raise votelib.evaluate.core.VotingSystemError(
+                    f'quota {self.quota_function.__name__} awarded total'
+                    f' {total_awarded} seats, {n_seats} expected'
+                )
+            elif self.on_overaward == 'subtract':
+                return self._subtract_overaward(
+                    votes, selected, n_seats, prev_gains=prev_gains
+                )
+            else:
+                raise ValueError
+        return selected
+
+    def _subtract_overaward(self,
+                            votes: Dict[Candidate, int],
+                            selected: Dict[Candidate, int],
+                            n_seats: int,
+                            prev_gains: Dict[Candidate, int] = {},
+                            ) -> Dict[Candidate, int]:
+        overaward = sum(selected.values()) + sum(prev_gains.values()) - n_seats
+        quota_val = self.quota_function(
+            sum(votes.values()), n_seats
+        )
+        while overaward > 0:
+            remainders = {
+                cand: -(
+                    votes.get(cand, 0)
+                    - quota_val * (cand_n_seats + prev_gains.get(cand, 0))
+                )
+                for cand, cand_n_seats in selected.items()
+            }
+            subtract_cand = votelib.evaluate.core.get_n_best(remainders, 1)[0]
+            if isinstance(subtract_cand, votelib.evaluate.core.Tie):
+                if subtract_cand in selected:
+                    if selected[subtract_cand] == 1:
+                        del selected[subtract_cand]
+                    else:
+                        selected[subtract_cand] -= 1
+                else:
+                    for tied_cand in subtract_cand:
+                        if selected[tied_cand] == 1:
+                            del selected[tied_cand]
+                        else:
+                            selected[tied_cand] -= 1
+                    selected[subtract_cand] = (
+                        selected.get(subtract_cand, 0) + len(subtract_cand) - 1
+                    )
+            elif selected[subtract_cand] == 1:
+                del selected[subtract_cand]
+            else:
+                selected[subtract_cand] -= 1
+            overaward -= 1
         return selected
 
 
-@simple_serialization
 class LargestRemainder:
     '''Distribute seats proportionally, rounding by largest remainder.
 
@@ -262,12 +333,21 @@ class LargestRemainder:
         total number of votes and number of seats. The common quota functions
         can be referenced by string name from the
         :mod:`votelib.component.quota` module.
+
+    All additional keyword arguments have the same meaning as in
+    :class:`QuotaDistributor`.
     '''
     def __init__(self,
                  quota_function: Union[str, Callable[[int, int], Number]],
-                 ):
+                 **kwargs):
         self.quota_function = votelib.component.quota.construct(quota_function)
-        self._quota_evaluator = QuotaDistributor(self.quota_function)
+        self._quota_evaluator = QuotaDistributor(self.quota_function, **kwargs)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            **self._quota_evaluator.to_dict(),
+            'class': votelib.persist.scoped_class_name(self)
+        }
 
     def evaluate(self,
                  votes: Dict[Candidate, int],
@@ -317,7 +397,7 @@ class HighestAverages:
     of the first n_seats quotients.
 
     This includes some popular proportional party-list systems like D'Hondt or
-    Sainte-Laguë/Webster The result is usually quite close to proportionality
+    Sainte-Laguë/Webster. The result is usually quite close to proportionality
     and avoids the Alabama paradox of largest remainder systems. However, it
     usually favors either large or smaller parties, depending on the choice
     of the divisor function.
@@ -551,8 +631,8 @@ class BiproportionalEvaluator:
                 for party in parties_labeled:
                     party_coefs[party] /= adj_coef
 
-    def _augment_result(self,
-                        result: Dict[Constituency, Dict[Candidate, int]],
+    @staticmethod
+    def _augment_result(result: Dict[Constituency, Dict[Candidate, int]],
                         districts_labeled: Dict[Constituency, Set[Candidate]],
                         parties_labeled: Dict[Candidate, Set[Constituency]],
                         start_district: Constituency,
@@ -691,13 +771,14 @@ class BiproportionalEvaluator:
             and n_seats >= 1
         )
 
-    def _calc_quots(self,
-                    votes: Dict[Constituency, Dict[Candidate, int]],
+    @staticmethod
+    def _calc_quots(votes: Dict[Constituency, Dict[Candidate, int]],
                     district_coefs: Dict[Constituency, int],
                     party_coefs: Dict[Candidate, Fraction],
                     ) -> Dict[Constituency, Dict[Candidate, Fraction]]:
-        '''Calculate fractional seat count apporximators from vote counts
-        and coefficients (inverse divisors) in both dimensions.
+        '''Calculate fractional seat count approximators in both dimensions.
+
+        Calculates from vote counts and coefficients (inverse divisors).
         '''
         return {
             district: {
@@ -707,8 +788,8 @@ class BiproportionalEvaluator:
             for district, district_votes in votes.items()
         }
 
-    def _districts_unsat(self,
-                         cur_district_seats: Dict[Constituency, int],
+    @staticmethod
+    def _districts_unsat(cur_district_seats: Dict[Constituency, int],
                          tgt_district_seats: Dict[Constituency, int],
                          ) -> Tuple[List[Constituency], List[Constituency]]:
         '''Return districts with less and more seats than needed, respectively.

@@ -1,5 +1,5 @@
-Persistence of election evaluators and other objects
----------------------------------------------------------
+Evaluator persistence API
+------------------------------
 
 .. autofunction:: votelib.persist.from_dict
 
