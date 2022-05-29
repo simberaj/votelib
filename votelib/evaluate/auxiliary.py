@@ -1,4 +1,4 @@
-'''Evaluators for special partial purposes, especially tiebreaking.
+"""Evaluators for special partial purposes, especially tiebreaking.
 
 These evaluators should not be used as the main component of an election
 system (except for obscure ones). Many of them choose the winners randomly,
@@ -6,7 +6,7 @@ so they are useful for tiebreaking, but that is about it.
 
 You can make the random evaluators outputs stable if you give them a seed for
 the random generator, but be careful with that in a real-world setting.
-'''
+"""
 
 import re
 import random
@@ -39,13 +39,13 @@ class SpoiledBallotRemover:
 
 @simple_serialization
 class RandomUnrankedBallotSelector:
-    '''Select candidates by drawing random simple ballots from the tally.
+    """Select candidates by drawing random simple ballots from the tally.
 
     Useful for tiebreaking. Can also be used to evaluate *random approval
     voting* if the approval votes are converted to simple first.
 
     :param seed: Seed for the random generator that performs the sampling.
-    '''
+    """
     def __init__(self,
                  seed: Optional[int] = None,
                  ):
@@ -56,25 +56,25 @@ class RandomUnrankedBallotSelector:
                  votes: Dict[Candidate, Number],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates by drawing random ballots.
+        """Select candidates by drawing random ballots.
 
         :param votes: Simple votes.
         :param n_seats: Number of candidates (ballots) to be selected.
-        '''
+        """
         random.seed(self.seed)
         return votelib.util.select_n_random(votes, n_seats)
 
 
 @simple_serialization
 class Sortitor:
-    '''Perform sortition (random sampling) among the candidates.
+    """Perform sortition (random sampling) among the candidates.
 
     This selects the candidates purely randomly, with equal probabilities for
     each of them. Useful for tiebreaking and some obscure protocols such as
     Venetian doge election.
 
     :param seed: Seed for the random generator that performs the sampling.
-    '''
+    """
     def __init__(self,
                  seed: Optional[int] = None,
                  ):
@@ -85,11 +85,11 @@ class Sortitor:
                  votes: Dict[Candidate, Any],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates randomly.
+        """Select candidates randomly.
 
         :param votes: Simple votes. The quantities of votes are disregarded.
         :param n_seats: Number of candidates to be selected.
-        '''
+        """
         random.seed(self.seed)
         return votelib.util.select_n_random({
             cand: 1 for cand, n_votes in votelib.util.sorted_votes(votes)
@@ -98,39 +98,39 @@ class Sortitor:
 
 @simple_serialization
 class InputOrderSelector:
-    '''Select first N candidates as they appear in the vote counts.
+    """Select first N candidates as they appear in the vote counts.
 
     This is useful for tiebreaking with an externally determined sort order,
     e.g. by ballot numbers or pre-generated random numbers. It takes advantage
     of dictionaries in Python 3.7+ maintaining insertion order.
-    '''
+    """
     def evaluate(self,
                  votes: Dict[Candidate, Any],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select the first candidates that appear in the votes dictionary.
+        """Select the first candidates that appear in the votes dictionary.
 
         :param votes: Simple votes. The quantities of votes are disregarded.
         :param n_seats: Number of candidates to be selected.
-        '''
+        """
         return [cand for i, cand in enumerate(votes.keys()) if i < n_seats]
 
 
 @simple_serialization
 class CandidateNumberRanker:
-    '''Select first N candidates with lowest candidate number.
+    """Select first N candidates with lowest candidate number.
 
     This is useful for tiebreaking with an externally determined sort order.
-    '''
+    """
     def evaluate(self,
                  votes: Dict[Candidate, Any],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select the first candidates that appear in the votes dictionary.
+        """Select the first candidates that appear in the votes dictionary.
 
         :param votes: Simple votes. The quantities of votes are disregarded.
         :param n_seats: Number of candidates to be selected.
-        '''
+        """
         return list(
             sorted(votes.keys(), operator.attrgetter('number'))
         )[:n_seats]
@@ -138,7 +138,7 @@ class CandidateNumberRanker:
 
 @simple_serialization
 class RFC3797Selector:
-    '''Select candidates randomly by the algorithm from RFC 3797.
+    """Select candidates randomly by the algorithm from RFC 3797.
 
     This is a well-defined random selection method using external sources
     of randomness, that are to be provided as numbers or lists thereof.
@@ -156,7 +156,7 @@ class RFC3797Selector:
     .. [#rfc3797] "RFC 3797: Publicly Verifiable Nominations Committee
         (NomCom) Random Selection", D. Eastlake 3rd.
         https://tools.ietf.org/html/rfc3797
-    '''
+    """
     IMPURE_CHARS = re.compile('[^a-zA-Z0-9]')
     ORDER_STRUCT = struct.Struct('>H')
     UNPACK_STRUCT = struct.Struct('>Q')
@@ -172,11 +172,11 @@ class RFC3797Selector:
                  votes: Dict[Candidate, Any],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select the candidates by the algorithm from RFC 3797.
+        """Select the candidates by the algorithm from RFC 3797.
 
         :param votes: Simple votes. The quantities of votes are disregarded.
         :param n_seats: Number of candidates to be selected.
-        '''
+        """
         cands = list(votes.keys())
         selected = []
         for i in range(n_seats):
@@ -196,10 +196,10 @@ class RFC3797Selector:
     def source_bytestring(cls,
                           sources: List[Union[Number, Collection[Number]]]
                           ) -> bytes:
-        '''Create the base randomness string from given randomness sources.
+        """Create the base randomness string from given randomness sources.
 
         Follows the procedure as given by Section 4 of the RFC.
-        '''
+        """
         components = []
         for source in sources:
             if isinstance(source, str):

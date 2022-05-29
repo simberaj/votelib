@@ -1,4 +1,4 @@
-'''Votelib - a library for evaluating election results.
+"""Votelib - a library for evaluating election results.
 
 Votelib objects provide the means to evaluate elections under many known
 election systems, be it simple or complicated, obscure or ubiquitous.
@@ -20,7 +20,7 @@ An election system usually specifies the following:
 The evaluator can be combined with the validator and nominator by the machinery
 in the :mod:`evaluate` subpackage. The :class:`VotingSystem` object can then
 wrap it into a formalized and named election system.
-'''
+"""
 
 import votelib.evaluate
 from votelib.persist import simple_serialization    # noqa: F401
@@ -28,18 +28,18 @@ from votelib.persist import simple_serialization    # noqa: F401
 
 @simple_serialization
 class VotingSystem:
-    '''A named voting system. Wraps an election evaluator.
+    """A named voting system. Wraps an election evaluator.
 
     :param name: Name of the system; usually mainly includes the body or
         position to be elected.
     :param evaluator: Evaluator representing the system. Can be combined with
         the validator and nominator by machinery in the :mod:`evaluate`
         subpackage.
-    '''
+    """
     def __init__(self, name: str, evaluator: votelib.evaluate.Evaluator):
         self.name = name
         self.evaluator = evaluator
 
     def evaluate(self, *args, **kwargs):
-        '''Return the evaluator's results of the system for the votes given.'''
+        """Return the evaluator's results of the system for the votes given."""
         return self.evaluator.evaluate(*args, **kwargs)

@@ -1,4 +1,4 @@
-'''General voting system evaluator machinery.'''
+"""General voting system evaluator machinery."""
 
 from __future__ import annotations
 
@@ -18,12 +18,12 @@ from votelib.persist import simple_serialization
 
 
 class VotingSystemError(Exception):
-    '''A voting system with a valid setup ended up in an unresolvable state.'''
+    """A voting system with a valid setup ended up in an unresolvable state."""
     pass
 
 
 class Tie(frozenset):
-    '''Candidates tied for a seat.
+    """Candidates tied for a seat.
 
     This object, a subclass of ``frozenset``, is produced by evaluators that do
     not resolve all evaluation ties - for example, a plurality evaluator when
@@ -35,19 +35,19 @@ class Tie(frozenset):
 
     This object also provides some special static and class methods to handle
     ties in some basic ways.
-    '''
+    """
     @classmethod
     def reconcile(cls,
                   elected: List[Union[Candidate, Tie]]
                   ) -> List[Candidate]:
-        '''Reconcile multiply tied candidates.
+        """Reconcile multiply tied candidates.
 
         A placeholder implementation to account for the situation where e.g.
         partial evaluations gave ties but their multiple occurrence in the
         overall result means the ties can be unambiguously resolved.
 
         :param elected: Selection result - a list of candidates or ties.
-        '''
+        """
         n_places = collections.defaultdict(float)
         for i, result in enumerate(elected):
             if isinstance(result, cls):
@@ -64,16 +64,16 @@ class Tie(frozenset):
 
     @staticmethod
     def any(result: List[Union[Candidate, Tie]]) -> bool:
-        '''Return True if there is any tie in the list, False otherwise.'''
+        """Return True if there is any tie in the list, False otherwise."""
         return any(isinstance(item, Tie) for item in result)
 
     @staticmethod
     def tie_rankings(rankings: List[List[Candidate]]
                      ) -> List[Union[Candidate, Tie]]:
-        '''Form a single ranking out of a list of rankings.
+        """Form a single ranking out of a list of rankings.
 
         Produces ties where the rankings do not agree.
-        '''
+        """
         raise NotImplementedError
 
     @classmethod
@@ -81,7 +81,7 @@ class Tie(frozenset):
                       elected: List[Union[Candidate, Tie]],
                       breaker: List[Candidate],
                       ) -> List[Candidate]:
-        '''Break ties in the elected list according to ordering in breaker.'''
+        """Break ties in the elected list according to ordering in breaker."""
         broken = []
         ties = {}
         for item in elected:
@@ -104,7 +104,7 @@ class Tie(frozenset):
 def get_n_best(votes: Dict[Candidate, Number],
                n_seats: int,
                ) -> List[Union[Candidate, Tie]]:
-    '''Return n_seats candidates with the highest number of votes.
+    """Return n_seats candidates with the highest number of votes.
 
     Essentially a plurality selection function.
     Produces ties correctly so is useful as a component in many other systems
@@ -114,7 +114,7 @@ def get_n_best(votes: Dict[Candidate, Number],
     :param n_seats: Number of seats to be filled.
     :returns: A list of top n_seats candidates. If there is a tie, the last
         items will refer to a single Tie object containing the tied candidates.
-    '''
+    """
     sorted_items = votelib.util.sorted_votes(votes)
     if len(sorted_items) > n_seats:
         # find if there is a tie between the last elected and first unelected
@@ -141,14 +141,14 @@ def get_n_best(votes: Dict[Candidate, Number],
 
 
 class Evaluator(metaclass=abc.ABCMeta):
-    '''Evaluate votes for candidates and allocate seats to them.
+    """Evaluate votes for candidates and allocate seats to them.
 
     A root abstract base class for all evaluators.
-    '''
+    """
     @abc.abstractmethod
     def evaluate(self, votes, *args, **kwargs
                  ) -> Union[List[Candidate], Dict[Candidate, int]]:
-        '''Evaluate votes for candidates and allocate seats to them.'''
+        """Evaluate votes for candidates and allocate seats to them."""
         raise NotImplementedError
 
 
@@ -159,42 +159,42 @@ class UnknownEvaluator(Evaluator):
 
 
 class Selector(Evaluator):
-    '''Elect a given number of candidates.
+    """Elect a given number of candidates.
 
     Requires a number of seats to determine the number of candidates to elect.
-    '''
+    """
     @abc.abstractmethod
     def evaluate(self, votes, n_seats, *args, **kwargs) -> List[Candidate]:
-        '''Elect n_seats candidates as a list.
+        """Elect n_seats candidates as a list.
 
         :param votes: Votes of any type.
         :param n_seats: Number of candidates to elect.
         :returns: A list of candidates elected, ordered by magnitude of victory
             (winner first).
-        '''
+        """
         raise NotImplementedError
 
 
 class SeatlessSelector(Evaluator):
-    '''Elect some candidates.
+    """Elect some candidates.
 
     Does not allow to pass a number of seats to determine the number of
     candidates to elect; it arises naturally from the votes and other selector
     settings.
-    '''
+    """
     @abc.abstractmethod
     def evaluate(self, votes, *args, **kwargs) -> List[Candidate]:
-        '''Elect a list of candidates without a guaranteed count.
+        """Elect a list of candidates without a guaranteed count.
 
         :param votes: Votes of any type.
         :returns: A list of candidates elected, ordered by magnitude of victory
             (winner first).
-        '''
+        """
         raise NotImplementedError
 
 
 class Distributor(Evaluator):
-    '''Allocate seats to candidates based on collective preference.'''
+    """Allocate seats to candidates based on collective preference."""
 
     @abc.abstractmethod
     def evaluate(self,
@@ -203,7 +203,7 @@ class Distributor(Evaluator):
                  prev_gains: Dict[Candidate, int] = {},
                  max_seats: Dict[Candidate, int] = {},
                  ) -> Dict[Candidate, int]:
-        '''Allocate n_seats to candidates as a dictionary.
+        """Allocate n_seats to candidates as a dictionary.
 
         :param votes: Votes of any type.
         :param n_seats: Number of seats to allocate to candidates.
@@ -214,16 +214,16 @@ class Distributor(Evaluator):
         :returns: Numbers of seats allocated to respective candidates.
             Candidates with no allocated seats do not appear in the dictionary.
             The ordering of the dictionary is unspecified.
-        '''
+        """
         raise NotImplementedError
 
 
 class SeatlessDistributor(Evaluator):
-    '''Give seats to candidates based on collective preference.
+    """Give seats to candidates based on collective preference.
 
     The number of seats cannot be specified - it stems from the nature of the
     election system.
-    '''
+    """
 
     @abc.abstractmethod
     def evaluate(self,
@@ -231,7 +231,7 @@ class SeatlessDistributor(Evaluator):
                  prev_gains: Dict[Candidate, int] = {},
                  max_seats: Dict[Candidate, int] = {},
                  ) -> Dict[Candidate, int]:
-        '''Determine numbers of seats given to candidates, as a dictionary.
+        """Determine numbers of seats given to candidates, as a dictionary.
 
         :param votes: Votes of any type.
         :param prev_gains: Seats gained by the candidate/party in previous
@@ -241,7 +241,7 @@ class SeatlessDistributor(Evaluator):
         :returns: Numbers of seats allocated to respective candidates.
             Candidates with no allocated seats do not appear in the dictionary.
             The ordering of the dictionary is unspecified.
-        '''
+        """
         raise NotImplementedError
 
 
@@ -256,19 +256,19 @@ class SeatCountCalculator:
 
 
 class OpenListEvaluator(metaclass=abc.ABCMeta):
-    '''An abstract class for open list selection evaluators.
+    """An abstract class for open list selection evaluators.
 
     Apart from votes and a number of seats, also requires the specification
     of a list of candidates to serve as the default (party-determined closed
     list) ordering to be overridden by preferential votes for candidates.
-    '''
+    """
     @abc.abstractmethod
     def evaluate(self,
                  votes: Dict[Any, Number],
                  n_seats: int,
                  candidate_list: List[Candidate],
                  ) -> List[Candidate]:
-        '''Elect n_seats candidates as a list.
+        """Elect n_seats candidates as a list.
 
         :param votes: Votes of any type.
         :param n_seats: Number of candidates to elect.
@@ -276,13 +276,13 @@ class OpenListEvaluator(metaclass=abc.ABCMeta):
             party.
         :returns: A list of candidates elected, ordered by magnitude of victory
             (winner first).
-        '''
+        """
         raise NotImplementedError
 
 
 @simple_serialization
 class MultistageDistributor:
-    '''A distribution evaluator with several rounds of awarding seats.
+    """A distribution evaluator with several rounds of awarding seats.
 
     Useful for several systems, e.g. multi-member proportional systems where
     the first round evaluates the constituencies and the second one evaluates
@@ -294,7 +294,7 @@ class MultistageDistributor:
     :param depth: Nesting depth of the results. Use numbers larger than 1 when
         the results from the rounds are nested by constituency levels (2 for
         one constituency level, etc.)
-    '''
+    """
 
     def __init__(self, rounds: List[Distributor], depth: int = 1):
         self.rounds = rounds
@@ -306,7 +306,7 @@ class MultistageDistributor:
                  prev_gains: Dict[Candidate, int] = {},
                  max_seats: Dict[Candidate, int] = {},
                  ) -> Dict[Candidate, int]:
-        '''Evaluate all rounds of the distribution.
+        """Evaluate all rounds of the distribution.
 
         :param votes: Votes to be evaluated. Either a single set to be passed
             to all rounds, or separate sets of votes for each round.
@@ -315,7 +315,7 @@ class MultistageDistributor:
             election rounds.
         :param max_seats: Maximum number of seats that the given
             candidate/party can obtain in total (including previous gains).
-        '''
+        """
         elected = prev_gains.copy()
         if hasattr(votes, 'items'):
             votes = [votes] * len(self.rounds)
@@ -464,7 +464,7 @@ class UnusedVotesDistributor(MultistageDistributor):
 
 @simple_serialization
 class AdjustedSeatCount:
-    '''Distribute an adjusted total number of seats according to votes cast.
+    """Distribute an adjusted total number of seats according to votes cast.
 
     Useful in multi-member proportional systems where overhang seats are
     accounted for, e.g. by leveling.
@@ -474,7 +474,7 @@ class AdjustedSeatCount:
         previously gained seats...).
     :param evaluator: A distribution evaluator producing the actual results
         with the adjusted number of seats.
-    '''
+    """
     def __init__(self,
                  calculator: SeatCountCalculator,
                  evaluator: Distributor,
@@ -488,7 +488,7 @@ class AdjustedSeatCount:
                  prev_gains: Dict[Candidate, int],
                  max_seats: Dict[Candidate, int] = {},
                  ) -> Dict[Candidate, int]:
-        '''Distribute an adjusted total number of seats.
+        """Distribute an adjusted total number of seats.
 
         :param votes: Votes to be evaluated, of any type accepted by the
             calculator and evaluator.
@@ -498,7 +498,7 @@ class AdjustedSeatCount:
             election rounds.
         :param max_seats: Maximum number of seats that the given
             candidate/party can obtain in total (including previous gains).
-        '''
+        """
         seat_adj = self.calculator.calculate(
             votes, n_seats, prev_gains=prev_gains, max_seats=max_seats
         )
@@ -512,7 +512,7 @@ class AdjustedSeatCount:
 
 @simple_serialization
 class AllowOverhang:
-    '''Increase the total number of seats to allow keeping overhang seats.
+    """Increase the total number of seats to allow keeping overhang seats.
 
     Overhang seats arise in multi-member proportional systems when a party
     gains more seats in the first round (usually local and plurality-based)
@@ -529,7 +529,7 @@ class AllowOverhang:
         results from the second round votes to determine which seats are
         overhang. Usually will be the same or very similar to the evaluator
         used in the second round directly.
-    '''
+    """
     def __init__(self, evaluator: Distributor):
         self.evaluator = evaluator
 
@@ -539,7 +539,7 @@ class AllowOverhang:
                   prev_gains: Dict[Candidate, int],
                   max_seats: Dict[Candidate, int] = {},
                   ) -> int:
-        '''Return an adjustment to the total number of seats to allow overhang.
+        """Return an adjustment to the total number of seats to allow overhang.
 
         :param votes: Second round votes to produce the proportional result to
             determine overhang.
@@ -551,7 +551,7 @@ class AllowOverhang:
             candidate/party can obtain in total, including first round results.
         :returns: Zero if no adjustment is necessary, a positive integer if it
             is, amounting to the number of overhang seats detected.
-        '''
+        """
         prop_result = self.evaluator.evaluate(
             votes, n_seats, max_seats=max_seats,
         )
@@ -565,7 +565,7 @@ class AllowOverhang:
 
 @simple_serialization
 class LevelOverhang:
-    '''Increase the total number of seats to proportional, keeping overhang.
+    """Increase the total number of seats to proportional, keeping overhang.
 
     Overhang seats arise in multi-member proportional systems when a party
     gains more seats in the first round (usually local and plurality-based)
@@ -582,7 +582,7 @@ class LevelOverhang:
         results from the second round votes to determine which seats are
         overhang. Usually will be the same or very similar to the evaluator
         used in the second round directly.
-    '''
+    """
     def __init__(self, evaluator: Distributor):
         self.evaluator = evaluator
 
@@ -592,7 +592,7 @@ class LevelOverhang:
                   prev_gains: Dict[Candidate, int],
                   max_seats: Dict[Candidate, int] = {},
                   ) -> int:
-        '''Return an adjustment to the total number of seats to level overhang.
+        """Return an adjustment to the total number of seats to level overhang.
 
         :param votes: Second round votes to produce the proportional result to
             determine overhang.
@@ -605,7 +605,7 @@ class LevelOverhang:
         :returns: Zero if no adjustment is necessary, a positive integer if it
             is, amounting to the sum of overhang seats detected and leveling
             seats required.
-        '''
+        """
         prop_result = self.evaluator.evaluate(
             votes, n_seats, max_seats=max_seats,
         )
@@ -629,7 +629,7 @@ class LevelOverhang:
 
 @simple_serialization
 class LevelOverhangByConstituency:
-    '''Increase the total number of seats to proportional in constituencies.
+    """Increase the total number of seats to proportional in constituencies.
 
     This is a variant :class:`LevelOverhang` that works out overhang and
     leveling seats on a constituency level (such as Länder in Germany)
@@ -646,7 +646,7 @@ class LevelOverhangByConstituency:
     :param overall_evaluator: Evaluates the total party result nationwide;
         if not given, an aggregate of the constituency result is used
         instead.
-    '''
+    """
     def __init__(self,
                  constituency_evaluator: Distributor,
                  overall_evaluator: Optional[Distributor] = None,
@@ -660,7 +660,7 @@ class LevelOverhangByConstituency:
                   prev_gains: Dict[Constituency, Dict[Candidate, int]],
                   max_seats: Dict[Constituency, Dict[Candidate, int]] = {},
                   ) -> int:
-        '''Adjust the seat count to level overhang by constituency.
+        """Adjust the seat count to level overhang by constituency.
 
         :param votes: Second round votes to produce the proportional result to
             determine overhang, by constituency.
@@ -675,7 +675,7 @@ class LevelOverhangByConstituency:
         :returns: Zero if no adjustment is necessary, a positive integer if it
             is, amounting to the sum of overhang seats detected and leveling
             seats required for all constituencies.
-        '''
+        """
         # Get lowest amount of seats per party and constituency as the maximum
         # of the party's first round count and its theoretical proportional
         # second round result.
@@ -727,7 +727,7 @@ class LevelOverhangByConstituency:
 
 @simple_serialization
 class PostConverted:
-    '''An evaluator whose results are run through a converter.
+    """An evaluator whose results are run through a converter.
 
     Useful when the evaluator is a part of a larger system and its output needs
     to be adapted to it, e.g. in multi-member proportional systems where first
@@ -736,19 +736,19 @@ class PostConverted:
 
     :param evaluator: An evaluator to run.
     :param converter: A converter to apply on the results of the evaluator.
-    '''
+    """
     def __init__(self, evaluator, converter):
         self.evaluator = evaluator
         self.converter = converter
 
     def evaluate(self, votes, *args, **kwargs):
-        '''Run the evaluator and return its result, converted.
+        """Run the evaluator and return its result, converted.
 
         All other arguments are passed through to the evaluator.
 
         :param votes: Votes for the evaluator.
         :param n_seats: Number of seats to allocate by the evaluator.
-        '''
+        """
         return self.converter.convert(
             self.evaluator.evaluate(votes, *args, **kwargs)
         )
@@ -756,7 +756,7 @@ class PostConverted:
 
 @simple_serialization
 class PreConverted:
-    '''An evaluator whose votes are first run through a converter.
+    """An evaluator whose votes are first run through a converter.
 
     Useful when the evaluator accepts a different type of votes than the
     actual ballots, where the converter adapts them - e.g. when the votes are
@@ -766,19 +766,19 @@ class PreConverted:
     :param evaluator: An evaluator to run.
     :param converter: A converter to apply on the votes before passing them to
         the evaluator.
-    '''
+    """
     def __init__(self, converter, evaluator):
         self.converter = converter
         self.evaluator = evaluator
 
     def evaluate(self, votes, *args, **kwargs):
-        '''Convert the votes by and evaluate them through the evaluator.
+        """Convert the votes by and evaluate them through the evaluator.
 
         All other arguments are passed through to the evaluator.
 
         :param votes: Votes to be passed to the converter.
         :param n_seats: Number of seats to allocate by the evaluator.
-        '''
+        """
         conv_votes = self.converter.convert(votes)
         return self.evaluator.evaluate(conv_votes, *args, **kwargs)
 
@@ -788,7 +788,7 @@ DEFAULT_SUBSETTER = votelib.vote.SimpleSubsetter()
 
 @simple_serialization
 class Conditioned:
-    '''An evaluator whose votes are pre-selected to exclude some variants.
+    """An evaluator whose votes are pre-selected to exclude some variants.
 
     Before passing the votes to the main evaluator, an eliminator is evaluated
     first, and only the candidates returned by it are allowed to proceed to the
@@ -802,7 +802,7 @@ class Conditioned:
         the number of seats (it should be independent of it).
     :param subsetter: A subsetter to subset a vote to just concern the
         candidates returned by the eliminator.
-    '''
+    """
     def __init__(self,
                  eliminator: SeatlessSelector,
                  evaluator: Evaluator,
@@ -821,7 +821,7 @@ class Conditioned:
                  n_seats: Optional[int] = None,
                  prev_gains: Dict[Candidate, int] = {},
                  **kwargs) -> Union[List[Candidate], Dict[Candidate, int]]:
-        '''Evaluate the main evaluator for variants that passed the eliminator.
+        """Evaluate the main evaluator for variants that passed the eliminator.
 
         All other keyword arguments are passed through to the main evaluator.
 
@@ -831,7 +831,7 @@ class Conditioned:
             (e.g. in previous scrutinia). Will be passed to both the main
             evaluator and eliminator, if they accept them (as determined by
             the `accepts_seats` function).
-        '''
+        """
         summed_votes = self._sum_party_votes(votes, depth=self.depth)
         summed_prev_gains = self._sum_party_votes(prev_gains, depth=self.depth)
         if accepts_prev_gains(self.eliminator):
@@ -886,7 +886,7 @@ class Conditioned:
 
 @simple_serialization
 class ByConstituency:
-    '''Perform constituency-wise evaluation of given system.
+    """Perform constituency-wise evaluation of given system.
 
     Evaluates and returns the results of the given system separately per each
     constituency it is given votes for. If desired, apportions the seats to
@@ -913,7 +913,7 @@ class ByConstituency:
     :param subsetter: A subsetter to subset a vote to just concern the
         candidates returned by the selector. The default option needs to be
         modified if the votes are more deeply nested.
-    '''
+    """
     def __init__(self,
                  evaluator: Evaluator,
                  apportioner: Union[
@@ -936,7 +936,7 @@ class ByConstituency:
                      Dict[Constituency, Dict[Candidate, int]],
                      Dict[Constituency, List[Candidate]],
                  ]:
-        '''Return the election results evaluated by constituency.
+        """Return the election results evaluated by constituency.
 
         :param votes: Votes in the format accepted by the inner evaluator.
         :param n_seats: Number of seats to be allocated:
@@ -960,7 +960,7 @@ class ByConstituency:
             candidate/party can obtain in total per constituency
             (including previous gains).
         :returns: Results of the evaluation by constituency.
-        '''
+        """
         apportionment = apportion(
             votes, n_seats, apportioner=self.apportioner
         )
@@ -1098,7 +1098,7 @@ class RemovedApportionment:
 
 @simple_serialization
 class ByParty:
-    '''Distribute overall party results among its constituency lists.
+    """Distribute overall party results among its constituency lists.
 
     This is an inverted variant of the :class:`ByConstituency` evaluator.
     Here, the total seat counts for each party are determined by an overall
@@ -1117,7 +1117,7 @@ class ByParty:
         for constituencies as candidates.
     :param subsetter: A subsetter according to the vote type used, to
         extract votes for any single party from the overall votes.
-    '''
+    """
     def __init__(self,
                  overall_evaluator: Distributor,
                  allocator: Optional[Distributor] = None,
@@ -1133,7 +1133,7 @@ class ByParty:
                  prev_gains: Dict[Constituency, Dict[Candidate, int]] = {},
                  max_seats: Dict[Constituency, Dict[Candidate, int]] = {},
                  ) -> Dict[Constituency, Dict[Candidate, int]]:
-        '''Return constituency-wise election results evaluated by party.
+        """Return constituency-wise election results evaluated by party.
 
         :param votes: Votes in the format accepted by the overall evaluator.
             They will be subsetted and aggregated to simple votes for
@@ -1147,7 +1147,7 @@ class ByParty:
             candidate/party can obtain in total per constituency
             (including previous gains). Not passed to the overall evaluator.
         :returns: Results of the evaluation by constituency.
-        '''
+        """
         overall_votes = votelib.convert.VoteTotals().convert(votes)
         overall_result = self.overall_evaluator.evaluate(
             overall_votes, n_seats
@@ -1188,7 +1188,7 @@ class ByParty:
 
 @simple_serialization
 class FixedSeatCount:
-    '''An evaluator wrapper that provides a fixed seat count.
+    """An evaluator wrapper that provides a fixed seat count.
 
     Useful when the seat count for a given system is predefined and constant.
     Then, you do not need to specify it each time you call the evaluator, just
@@ -1198,7 +1198,7 @@ class FixedSeatCount:
         its evaluate method.
     :param n_seats: The fixed number of seats to provide to the evaluator at
         each call.
-    '''
+    """
 
     accepts_seats = False
 
@@ -1212,13 +1212,13 @@ class FixedSeatCount:
     def evaluate(self,
                  votes: Dict[Any, int],
                  **kwargs) -> Union[List[Candidate], Dict[Candidate, int]]:
-        '''Run the inner evaluator with the predefined number of seats.
+        """Run the inner evaluator with the predefined number of seats.
 
         All other keyword parameters are passed through to the wrapped
         evaluator.
 
         :param votes: Votes of the type accepted by the wrapped evaluator.
-        '''
+        """
         return self.evaluator.evaluate(
             votes, self.n_seats, **kwargs
         )
@@ -1226,7 +1226,7 @@ class FixedSeatCount:
 
 @simple_serialization
 class PartyListEvaluator:
-    '''Evaluate which candidates are elected from party lists.
+    """Evaluate which candidates are elected from party lists.
 
     Useful to determine the actual representatives elected when the result is
     first evaluated by party. This wrapper evaluates the party-based result
@@ -1246,7 +1246,7 @@ class PartyListEvaluator:
         where the candidate votes are grouped by party
         (such as :class:`votelib.convert.GroupVotesByParty`). If not given,
         the list votes are passed unchanged.
-    '''
+    """
     def __init__(self,
                  party_eval: Distributor,
                  list_eval: Optional[OpenListEvaluator] = None,
@@ -1264,7 +1264,7 @@ class PartyListEvaluator:
                  party_lists: Dict[ElectionParty, List[Candidate]],
                  list_votes: Dict[ElectionParty, Dict[Any, Number]] = None,
                  **kwargs) -> Dict[ElectionParty, List[Person]]:
-        '''Return lists of candidates elected for each party.
+        """Return lists of candidates elected for each party.
 
         All keyword arguments are passed to the party evaluator.
 
@@ -1278,7 +1278,7 @@ class PartyListEvaluator:
             are considered closed.
         :raises ValueError: If only one of list votes and a list evaluator
             is given.
-        '''
+        """
         party_result = self.party_eval.evaluate(votes, n_seats, **kwargs)
         if self.list_eval is None:
             # evaluate closed lists
@@ -1303,7 +1303,7 @@ class PartyListEvaluator:
 
 
 def accepts_seats(evaluator: Evaluator) -> bool:
-    '''Whether evaluator takes seat count as an argument to evaluate().'''
+    """Whether evaluator takes seat count as an argument to evaluate()."""
     if hasattr(evaluator, 'accepts_seats'):
         return evaluator.accepts_seats
     else:
@@ -1312,7 +1312,7 @@ def accepts_seats(evaluator: Evaluator) -> bool:
 
 
 def accepts_prev_gains(evaluator: Evaluator) -> bool:
-    '''Whether evaluator takes previous gains as an argument to evaluate().'''
+    """Whether evaluator takes previous gains as an argument to evaluate()."""
     return 'prev_gains' in inspect.signature(evaluator.evaluate).parameters
 
 
@@ -1328,7 +1328,7 @@ def _has_generic(params: Dict[str, inspect.Parameter]) -> bool:
 
 @simple_serialization
 class Plurality:
-    '''Plurality voting / maximum score evaluator. Elects a list of candidates.
+    """Plurality voting / maximum score evaluator. Elects a list of candidates.
 
     This encompasses the following voting systems:
 
@@ -1359,13 +1359,13 @@ class Plurality:
 
     These voting systems all use this evaluator together with some vote
     conversion or validation criteria.
-    '''
+    """
 
     def evaluate(self,
                  votes: Dict[Candidate, Number],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates by plurality voting.
+        """Select candidates by plurality voting.
 
         In case of a tie, returns :class:`Tie` objects at the end of the list
         of elected candidates.
@@ -1377,13 +1377,13 @@ class Plurality:
         :param n_seats: Number of candidates to select.
         :returns: A list of elected candidates, sorted in descending order by
             the input votes.
-        '''
+        """
         return get_n_best(votes, n_seats)
 
 
 @simple_serialization
 class TieBreaking:
-    '''Break ties from the main evaluation through a dedicated tiebreaker.
+    """Break ties from the main evaluation through a dedicated tiebreaker.
 
     Runs the main evaluator on the input, and if ties are present in its
     output, runs them through a separately specified selector with the
@@ -1398,7 +1398,7 @@ class TieBreaking:
     :param tiebreaker: A selector to evaluate ties.
     :param vote_subsetter: A subsetter to subset a vote to just concern the
         tied candidates.
-    '''
+    """
     def __init__(self,
                  main: Evaluator,
                  tiebreaker: Selector,
@@ -1409,14 +1409,14 @@ class TieBreaking:
         self.subsetter = subsetter
 
     def evaluate(self, votes, *args, **kwargs):
-        '''Evaluate the election, breaking ties if they arise.
+        """Evaluate the election, breaking ties if they arise.
 
         Any arguments besides the votes dictionary are passed unchanged to the
         main evaluator.
 
         :param votes: Votes for the election; will be used to feed the main
             evaluator (and the tiebreaker, after subsetting).
-        '''
+        """
         main_result = self.main.evaluate(votes, *args, **kwargs)
         subset_conv = votelib.convert.SubsettedVotes(self.subsetter)
         if Tie.any(main_result):
