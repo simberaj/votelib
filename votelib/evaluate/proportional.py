@@ -1,4 +1,4 @@
-'''Distribution evaluators that are usually called proportional.
+"""Distribution evaluators that are usually called proportional.
 
 This contains the most common distribution evaluators used in party-list
 elections that at least aim to be proportional (although some parameter setups
@@ -6,14 +6,14 @@ might make the result very nonproportional, such as the Imperiali divisor)
 and also some similar, simpler distribution evaluators that aim for strict
 proportionality while relaxing some of the constraints of a distribution
 evaluator.
-'''
+"""
 
 import bisect
 import collections
 import decimal
 from fractions import Fraction
 from typing import (
-    List, Tuple, Dict, Union, Callable, Optional, Set, Collection
+    Any, List, Tuple, Dict, Union, Callable, Optional, Set, Collection
 )
 from numbers import Number
 
@@ -30,17 +30,17 @@ INF = float('inf')
 
 @simple_serialization
 class PureProportionality:
-    '''Distribute seats among candidates strictly proportionally (no rounding).
+    """Distribute seats among candidates strictly proportionally (no rounding).
 
     This evaluator is mostly auxiliary since it gives fractional seat counts.
-    '''
+    """
     def evaluate(self,
                  votes: Dict[Candidate, int],
                  n_seats: int,
                  prev_gains: Dict[Candidate, int] = {},
                  max_seats: Dict[Candidate, int] = {},
                  ) -> Dict[Candidate, Fraction]:
-        '''Distribute seats exactly proportionally, giving fractional seats.
+        """Distribute seats exactly proportionally, giving fractional seats.
 
         :param votes: Simple votes to be evaluated.
         :param n_seats: Number of seats to be filled.
@@ -49,7 +49,7 @@ class PureProportionality:
             awarded here.
         :param max_seats: Maximum number of seats that the given
             candidate/party can obtain in total (including previous gains).
-        '''
+        """
         fixed = []
         result = {}
         prev_len_fixed = -1
@@ -92,7 +92,7 @@ class VotesPerSeat:
     """Award seats for each N votes cast for each candidate.
 
     This is an old and simple system that was used e.g. in pre-war Germany
-    [#wrstag]_. It divides the number of votes a pre-specified constant and
+    [#wrstag]_. It divides the number of votes by a pre-specified constant and
     rounds to give the appropriate number of seats. It is also used as an
     auxiliary evaluator in some other systems with fixed quota.
 
@@ -161,7 +161,7 @@ class VotesPerSeat:
 
 @simple_serialization
 class QuotaDistributor:
-    '''Distribute seats proportionally, according to multiples of quota filled.
+    """Distribute seats proportionally, according to multiples of quota filled.
 
     Each contestant is awarded the number of seats according to the number
     of times their votes fill the provided quota. (This essentially means the
@@ -169,7 +169,9 @@ class QuotaDistributor:
     numbers of seats.)
 
     This is usually not a self-standing evaluator because it (except for very
-    rare cases) does not award the full number of seats.
+    rare cases) does not award the full number of seats; it is, however, used
+    in initial stages of some proportional systems, such as the Czech
+    Chamber of Deputies election.
 
     :param quota_function: A callable producing the quota threshold from the
         total number of votes and number of seats. The common quota functions
@@ -177,15 +179,28 @@ class QuotaDistributor:
         :mod:`votelib.component.quota` module.
     :param accept_equal: Whether to consider the candidate elected when
         their votes exactly equal the quota.
-    '''
+    :param on_overaward: Some ill-conditioned but still used quotas, such as
+        Imperiali, may distribute more seats than the allocated total since
+        they are low. In that case, do the following:
+
+        -   ``'ignore'`` - return the result regardless,
+        -   ``'error'`` - raise a VotingSystemError,
+        -   ``'subtract'`` - subtract seats from the candidates with the
+            smallest remainder after the quota division (those that exceed the
+            quota by a lowest margin) until the total seat count is met.
+    """
     def __init__(self,
                  quota_function: Union[
                      str, Callable[[int, int], Number]
                  ] = 'droop',
                  accept_equal: bool = True,
+                 on_overaward: str = 'error',
                  ):
         self.quota_function = votelib.component.quota.construct(quota_function)
         self.accept_equal = accept_equal
+        if on_overaward not in ('ignore', 'error', 'subtract'):
+            raise ValueError(f'invalid on_overaward setting: {on_overaward}')
+        self.on_overaward = on_overaward
 
     def evaluate(self,
                  votes: Dict[Candidate, int],
@@ -193,7 +208,7 @@ class QuotaDistributor:
                  prev_gains: Dict[Candidate, int] = {},
                  max_seats: Dict[Candidate, int] = {},
                  ) -> Dict[Candidate, int]:
-        '''Distribute seats proportionally by multiples of quota filled.
+        """Distribute seats proportionally by multiples of quota filled.
 
         :param votes: Simple votes to be evaluated.
         :param n_seats: Number of seats to be filled.
@@ -202,8 +217,8 @@ class QuotaDistributor:
             awarded here.
         :param max_seats: Maximum number of seats that the given
             candidate/party can obtain in total (including previous gains).
-        '''
-        qval = self.quota_function(
+        """
+        quota_val = self.quota_function(
             sum(votes.values()), n_seats
         )
         selected = {}
@@ -212,13 +227,14 @@ class QuotaDistributor:
         for candidate, n_votes in votes.items():
             n_prev = prev_gains.get(candidate, 0)
             fulfills_quota = (
-                n_votes > qval
-                or self.accept_equal and n_votes == qval
+                n_votes > quota_val
+                or self.accept_equal and n_votes == quota_val
             )
             if fulfills_quota:
-                n_add_seats = int(Fraction(n_votes, qval)) - n_prev
+                n_add_seats = int(Fraction(n_votes, quota_val)) - n_prev
                 if n_add_seats > 0:
-                    if n_add_seats + n_prev > max_seats.get(candidate, INF):
+                    cand_max_seats = max_seats.get(candidate, n_seats)
+                    if n_add_seats + n_prev > cand_max_seats:
                         overshoot = n_add_seats + n_prev
                         n_add_seats -= overshoot
                         n_overshot += overshoot
@@ -239,12 +255,67 @@ class QuotaDistributor:
                 prev_gains=total_gained,
                 max_seats=max_seats
             ))
+        total_awarded = sum(selected.values()) + sum(prev_gains.values())
+        if total_awarded > n_seats:
+            if self.on_overaward == 'ignore':
+                return selected
+            elif self.on_overaward == 'error':
+                raise votelib.evaluate.core.VotingSystemError(
+                    f'quota {self.quota_function.__name__} awarded total'
+                    f' {total_awarded} seats, {n_seats} expected'
+                )
+            elif self.on_overaward == 'subtract':
+                return self._subtract_overaward(
+                    votes, selected, n_seats, prev_gains=prev_gains
+                )
+            else:
+                raise ValueError
+        return selected
+
+    def _subtract_overaward(self,
+                            votes: Dict[Candidate, int],
+                            selected: Dict[Candidate, int],
+                            n_seats: int,
+                            prev_gains: Dict[Candidate, int] = {},
+                            ) -> Dict[Candidate, int]:
+        overaward = sum(selected.values()) + sum(prev_gains.values()) - n_seats
+        quota_val = self.quota_function(
+            sum(votes.values()), n_seats
+        )
+        while overaward > 0:
+            remainders = {
+                cand: -(
+                    votes.get(cand, 0)
+                    - quota_val * (cand_n_seats + prev_gains.get(cand, 0))
+                )
+                for cand, cand_n_seats in selected.items()
+            }
+            subtract_cand = votelib.evaluate.core.get_n_best(remainders, 1)[0]
+            if isinstance(subtract_cand, votelib.evaluate.core.Tie):
+                if subtract_cand in selected:
+                    if selected[subtract_cand] == 1:
+                        del selected[subtract_cand]
+                    else:
+                        selected[subtract_cand] -= 1
+                else:
+                    for tied_cand in subtract_cand:
+                        if selected[tied_cand] == 1:
+                            del selected[tied_cand]
+                        else:
+                            selected[tied_cand] -= 1
+                    selected[subtract_cand] = (
+                        selected.get(subtract_cand, 0) + len(subtract_cand) - 1
+                    )
+            elif selected[subtract_cand] == 1:
+                del selected[subtract_cand]
+            else:
+                selected[subtract_cand] -= 1
+            overaward -= 1
         return selected
 
 
-@simple_serialization
 class LargestRemainder:
-    '''Distribute seats proportionally, rounding by largest remainder.
+    """Distribute seats proportionally, rounding by largest remainder.
 
     Each contestant is awarded the number of seats according to the number
     of times their votes fill the provided quota, just like
@@ -262,12 +333,21 @@ class LargestRemainder:
         total number of votes and number of seats. The common quota functions
         can be referenced by string name from the
         :mod:`votelib.component.quota` module.
-    '''
+
+    All additional keyword arguments have the same meaning as in
+    :class:`QuotaDistributor`.
+    """
     def __init__(self,
                  quota_function: Union[str, Callable[[int, int], Number]],
-                 ):
+                 **kwargs):
         self.quota_function = votelib.component.quota.construct(quota_function)
-        self._quota_evaluator = QuotaDistributor(self.quota_function)
+        self._quota_evaluator = QuotaDistributor(self.quota_function, **kwargs)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            **self._quota_evaluator.to_dict(),
+            'class': votelib.persist.scoped_class_name(self)
+        }
 
     def evaluate(self,
                  votes: Dict[Candidate, int],
@@ -275,7 +355,7 @@ class LargestRemainder:
                  prev_gains: Dict[Candidate, int] = {},
                  max_seats: Dict[Candidate, int] = {},
                  ) -> Dict[Candidate, int]:
-        '''Distribute seats proportionally, rounding by largest remainder.
+        """Distribute seats proportionally, rounding by largest remainder.
 
         :param votes: Simple votes to be evaluated.
         :param n_seats: Number of seats to be filled.
@@ -284,7 +364,7 @@ class LargestRemainder:
             awarded here.
         :param max_seats: Maximum number of seats that the given
             candidate/party can obtain in total (including previous gains).
-        '''
+        """
         # first, assign the non-remainder seats for those over the quota
         quota_elected = self._quota_evaluator.evaluate(
             votes, n_seats, prev_gains
@@ -310,14 +390,14 @@ class LargestRemainder:
 
 @simple_serialization
 class HighestAverages:
-    '''Distribute seats proportionally by ordering divided vote counts.
+    """Distribute seats proportionally by ordering divided vote counts.
 
     Divides the vote count for each party by an increasing sequence of divisors
     (usually small integers), sorts these quotients and awards a seat for each
     of the first n_seats quotients.
 
     This includes some popular proportional party-list systems like D'Hondt or
-    Sainte-Laguë/Webster The result is usually quite close to proportionality
+    Sainte-Laguë/Webster. The result is usually quite close to proportionality
     and avoids the Alabama paradox of largest remainder systems. However, it
     usually favors either large or smaller parties, depending on the choice
     of the divisor function.
@@ -328,7 +408,7 @@ class HighestAverages:
         the number of currently held seats raised by one. The common divisor
         functions can be referenced by string name from the
         :mod:`votelib.component.divisor` module.
-    '''
+    """
     def __init__(self,
                  divisor_function: Union[
                      str, Callable[[int], Number]
@@ -344,7 +424,7 @@ class HighestAverages:
                  prev_gains: Dict[Candidate, int] = {},
                  max_seats: Dict[Candidate, int] = {},
                  ) -> Dict[Candidate, int]:
-        '''Distribute seats proportionally by highest averages.
+        """Distribute seats proportionally by highest averages.
 
         :param votes: Simple votes to be evaluated.
         :param n_seats: Number of seats to be filled.
@@ -352,7 +432,7 @@ class HighestAverages:
             election rounds, to determine the starting divisor.
         :param max_seats: Maximum number of seats that the given
             candidate/party can obtain in total (including previous gains).
-        '''
+        """
         totals = prev_gains.copy()
         quotient_dict = {}
         for cand, n_votes in votes.items():
@@ -400,7 +480,7 @@ class HighestAverages:
 
 @simple_serialization
 class BiproportionalEvaluator:
-    '''Allocate seats biproportionally to parties and constituencies.
+    """Allocate seats biproportionally to parties and constituencies.
 
     Biproportional apportionment is a method to provide proportional election
     results in two dimensions - constituencies and parties (candidates).
@@ -439,7 +519,7 @@ class BiproportionalEvaluator:
     .. [#puk] "Chapter 15. Double-Proportional Divisor Methods:
         Technicalities", F. Pukelsheim. In: *Proportional Representation*,
         DOI ``10.1007/978-3-319-64707-4_15``.
-    '''
+    """
 
     SIGNPOST_QS: Dict[str, Union[int, Fraction]] = {
         'd_hondt': 0,
@@ -470,7 +550,7 @@ class BiproportionalEvaluator:
     def _extract_signpost_q(self,
                             fx: Callable[[int], Number],
                             ) -> Union[int, Fraction]:
-        '''Determine the signpost subtraction constant from the divisor.'''
+        """Determine the signpost subtraction constant from the divisor."""
         value = self.SIGNPOST_QS.get(fx.__name__, NotImplemented)
         if value is NotImplemented:
             raise NotImplementedError(
@@ -482,12 +562,12 @@ class BiproportionalEvaluator:
                  votes: Dict[Constituency, Dict[Candidate, int]],
                  n_seats: Union[int, Dict[Constituency, int]],
                  ) -> Dict[Constituency, Dict[Candidate, int]]:
-        '''Distribute seats biproportionally.
+        """Distribute seats biproportionally.
 
         :param votes: Simple votes per constituency to be evaluated.
         :param n_seats: Number of seats to be filled, either in total or by
             constituency.
-        '''
+        """
         # Initial result, proportional by parties only.
         # All subsequent modifications preserve this proportionality.
         result = self._initial_solution(votes, n_seats)
@@ -551,21 +631,21 @@ class BiproportionalEvaluator:
                 for party in parties_labeled:
                     party_coefs[party] /= adj_coef
 
-    def _augment_result(self,
-                        result: Dict[Constituency, Dict[Candidate, int]],
+    @staticmethod
+    def _augment_result(result: Dict[Constituency, Dict[Candidate, int]],
                         districts_labeled: Dict[Constituency, Set[Candidate]],
                         parties_labeled: Dict[Candidate, Set[Constituency]],
                         start_district: Constituency,
                         districts_over: List[Constituency],
                         ) -> None:
-        '''Transfer a seat to increase proportionality in result.
+        """Transfer a seat to increase proportionality in result.
 
         Move one allocated seat to *start_district* along a path determined
         by alternating values in *districts_labeled* and *parties_labeled*
         through alternated additions and subtractions until a seat is
         subtracted from one of *districts_over*, which lowers the flaw count
         (disproportionality) by two seats.
-        '''
+        """
         aug_path = [start_district]
         cur_source = districts_labeled
         while aug_path[-1] not in districts_over:
@@ -592,12 +672,12 @@ class BiproportionalEvaluator:
                   districts_labeled: Collection[Constituency],
                   parties_labeled: Collection[Candidate],
                   ) -> Fraction:
-        '''Determine the adjustment coefficient that will create more ties.
+        """Determine the adjustment coefficient that will create more ties.
 
         Seats can only be transferred along cells (district-party combinations)
         with a tied result. We aim to find a coefficient to multiply the cell
         quotient values in some columns or rows so that more ties are created.
-        '''
+        """
         alpha = 0
         beta = INF
         for district, d_quots in quotients.items():
@@ -636,7 +716,7 @@ class BiproportionalEvaluator:
                      Dict[Constituency, Set[Candidate]],
                      Dict[Candidate, Set[Constituency]]
                  ]:
-        '''Attempt to find a seat transfer path along tied cells.'''
+        """Attempt to find a seat transfer path along tied cells."""
         all_parties = list(sorted(frozenset(
             p for dqs in quotients.values() for p in dqs.keys()
         )))
@@ -677,28 +757,29 @@ class BiproportionalEvaluator:
         return labeled_districts, labeled_parties
 
     def _is_upgradable(self, quotient: Fraction, n_seats: int) -> bool:
-        '''Check if the cell contains a tie and a seat can be added.'''
+        """Check if the cell contains a tie and a seat can be added."""
         return (
             int(quotient) == quotient - self.signpost_q
             and n_seats + 1 - self.signpost_q == quotient
         )
 
     def _is_downgradable(self, quotient: Fraction, n_seats: int) -> bool:
-        '''Check if the cell contains a tie and a seat can be subtracted.'''
+        """Check if the cell contains a tie and a seat can be subtracted."""
         return (
             int(quotient) == quotient - self.signpost_q
             and n_seats - self.signpost_q == quotient
             and n_seats >= 1
         )
 
-    def _calc_quots(self,
-                    votes: Dict[Constituency, Dict[Candidate, int]],
+    @staticmethod
+    def _calc_quots(votes: Dict[Constituency, Dict[Candidate, int]],
                     district_coefs: Dict[Constituency, int],
                     party_coefs: Dict[Candidate, Fraction],
                     ) -> Dict[Constituency, Dict[Candidate, Fraction]]:
-        '''Calculate fractional seat count apporximators from vote counts
-        and coefficients (inverse divisors) in both dimensions.
-        '''
+        """Calculate fractional seat count approximators in both dimensions.
+
+        Calculates from vote counts and coefficients (inverse divisors).
+        """
         return {
             district: {
                 party: n_votes * district_coefs[district] * party_coefs[party]
@@ -707,14 +788,14 @@ class BiproportionalEvaluator:
             for district, district_votes in votes.items()
         }
 
-    def _districts_unsat(self,
-                         cur_district_seats: Dict[Constituency, int],
+    @staticmethod
+    def _districts_unsat(cur_district_seats: Dict[Constituency, int],
                          tgt_district_seats: Dict[Constituency, int],
                          ) -> Tuple[List[Constituency], List[Constituency]]:
-        '''Return districts with less and more seats than needed, respectively.
+        """Return districts with less and more seats than needed, respectively.
 
         If both are empty, proportionality is achieved.
-        '''
+        """
         all_districts = (
             frozenset(cur_district_seats)
             | frozenset(tgt_district_seats)
@@ -731,7 +812,7 @@ class BiproportionalEvaluator:
                           votes: Dict[Constituency, Dict[Candidate, int]],
                           n_seats: Union[int, Dict[Constituency, int]],
                           ) -> Dict[Constituency, Dict[Candidate, int]]:
-        '''Allocate seats proportionally along the party dimension.'''
+        """Allocate seats proportionally along the party dimension."""
         # First, allocate the total seats to parties.
         party_seats = self._eval.evaluate(
             votelib.convert.VoteTotals().convert(votes),
@@ -761,7 +842,7 @@ class BiproportionalEvaluator:
                              votes: Dict[Constituency, Dict[Candidate, int]],
                              seats: Dict[Constituency, Dict[Candidate, int]],
                              ) -> Dict[Candidate, Fraction]:
-        '''Determine initial party coefficients from their votes and seats.
+        """Determine initial party coefficients from their votes and seats.
 
         This is done to transpose the result obtained by conventional
         uniproportional evaluation to the biproportional format that used
@@ -769,7 +850,7 @@ class BiproportionalEvaluator:
         be consistent with the seat counts awarded to parties by the initial
         evaluation. The coefficients will usually not differ much, only by the
         degree by which the initial solution is disproportional to parties.
-        '''
+        """
         party_coefs = {}
         for party in votelib.convert.VoteTotals().convert(votes).keys():
             lowcoef = 0

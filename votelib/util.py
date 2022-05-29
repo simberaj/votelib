@@ -1,7 +1,7 @@
-'''Various utility functions for other modules of Votelib.
+"""Various utility functions for other modules of Votelib.
 
 There should normally be no need to use these functions directly.
-'''
+"""
 
 import operator
 import itertools
@@ -9,10 +9,10 @@ import collections
 import bisect
 import random
 from fractions import Fraction
-from typing import Any, List, Tuple, Dict, Union, Iterable
+from typing import Any, List, Tuple, Dict, Iterable
 from numbers import Number
 
-from votelib.vote import RankedVoteType
+from votelib.vote import RankedVoteType, ScoreVoteType
 from votelib.candidate import Candidate
 
 
@@ -37,7 +37,7 @@ def descending_dict(d: Dict[Any, Number]) -> Dict[Any, Number]:
 
 def all_ranked_candidates(votes: Dict[RankedVoteType, Any]
                           ) -> List[Candidate]:
-    '''Return a list of all candidates appearing in any of the rankings.
+    """Return a list of all candidates appearing in any of the rankings.
 
     Preserves the input ordering (i.e. first, the candidates ranked in any
     first choice position are listed in the order of the first such vote,
@@ -46,12 +46,26 @@ def all_ranked_candidates(votes: Dict[RankedVoteType, Any]
 
     :param votes: Ranked votes.
     :returns: All unique candidates from the ranked votes.
-    '''
+    """
     output = []
     for cand, rank_i, n_votes in all_rankings(votes):
         if cand not in output:
             output.append(cand)
     return output
+
+
+def all_scored_candidates(votes: Dict[ScoreVoteType, Any]
+                          ) -> List[Candidate]:
+    """Return a list of all candidates appearing in any of the scorings.
+
+    Does not guarantee the preservation of input ordering.
+
+    :param votes: Scored votes.
+    :returns: All unique candidates from the scored votes.
+    """
+    return list(frozenset(
+        cand for vote in votes.keys() for cand, score in vote
+    ))
 
 
 def all_rankings(votes: Dict[RankedVoteType, Any]
@@ -85,7 +99,7 @@ def distribution_to_selection(d: Dict[Any, Number]) -> List[Any]:
 def sorted_votes(votes: Dict[Any, Number],
                  descending: bool = True,
                  ) -> List[Tuple[Any, Number]]:
-    '''Return votes items sorted by value.'''
+    """Return votes items sorted by value."""
     return list(sorted(
         votes.items(),
         key=operator.itemgetter(1),
@@ -146,8 +160,12 @@ def _select_n_random_float(candidates: List[Any],
     )
 
 
-def exact_mean(values: List[Union[int, Fraction]]) -> Fraction:
-    return Fraction(sum(values), len(values))
+def exact_mean(values: List[Number]) -> Number:
+    total = sum(values)
+    if isinstance(total, float):
+        return total / len(values)
+    else:
+        return Fraction(total, len(values))
 
 
 EXACT_AGGREGATORS = {

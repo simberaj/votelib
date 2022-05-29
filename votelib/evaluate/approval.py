@@ -1,11 +1,11 @@
-'''Advanced approval voting methods.
+"""Advanced approval voting methods.
 
 This module contains approval voting evaluators that cannot be reduced to
 a plurality evaluation by aggregating the scores. Use
 :class:`votelib.convert.ApprovalToSimpleVotes` in conjunction with
 :class:`votelib.evaluate.Plurality` to evaluate simple approval voting (AV)
 or satisfaction approval voting (SAV).
-'''
+"""
 
 import itertools
 import collections
@@ -21,7 +21,7 @@ from votelib.persist import simple_serialization
 
 @simple_serialization
 class ProportionalApproval:
-    '''Proportional Approval Voting (PAV) evaluator. [#wpav]_
+    """Proportional Approval Voting (PAV) evaluator. [#wpav]_
 
     This method uses approval votes (voters select one or more permissible
     candidates) and evaluates the satisfaction of voters with each of the
@@ -39,7 +39,7 @@ class ProportionalApproval:
 
     .. [#wpav] "Proportional approval voting", Wikipedia.
         https://en.wikipedia.org/wiki/Proportional_approval_voting
-    '''
+    """
     def __init__(self):
         self._coefs = [0]
 
@@ -47,14 +47,14 @@ class ProportionalApproval:
                  votes: Dict[FrozenSet[Candidate], int],
                  n_seats: int,
                  ) -> List[Candidate]:
-        '''Select candidates by proportional approval.
+        """Select candidates by proportional approval.
 
         :param votes: Approval votes.
         :param n_seats: Number of candidates to be elected.
         :returns: Selected candidates in decreasing order measured by
             drop in satisfaction when the given candidate is excluded from the
             selected set.
-        '''
+        """
         if len(self._coefs) < n_seats:
             self._coefs += [
                 sum(Fraction(1, k + 1) for k in range(n))
@@ -72,13 +72,13 @@ class ProportionalApproval:
                         alternative: FrozenSet[Candidate],
                         votes: Dict[FrozenSet[Candidate], int],
                         ) -> List[Candidate]:
-        '''Order the candidates within an alternative.
+        """Order the candidates within an alternative.
 
         To output a correctly sorted list, we need to extend the PAV algorithm
         to impose an ordering to the set. This is done by sorting in decreasing
         order measured by drop in satisfaction when the given candidate is
         excluded from the selected set.
-        '''
+        """
         satisfaction_drops = {
             cand: -self._satisfaction(alternative - {cand}, votes)
             for cand in alternative
@@ -91,7 +91,7 @@ class ProportionalApproval:
                                votes: Dict[FrozenSet[Candidate], int],
                                n_seats: int,
                                ) -> List[FrozenSet[Candidate]]:
-        '''Get the selection alternative(s) with the highest satisfaction.'''
+        """Get the selection alternative(s) with the highest satisfaction."""
         all_candidates = frozenset(
             cand for alt in votes.keys() for cand in alt
         )
@@ -120,7 +120,7 @@ class ProportionalApproval:
 
 @simple_serialization
 class SequentialProportionalApproval:
-    '''Sequential Proportional Approval Voting (SPAV) evaluator. [#wspav]_
+    """Sequential Proportional Approval Voting (SPAV) evaluator. [#wspav]_
 
     This method uses approval votes (voters select one or more permissible
     candidates) but evaluates them iteratively, unlike proportional approval
@@ -134,18 +134,18 @@ class SequentialProportionalApproval:
 
     .. [#wspav] "Sequential proportional approval voting", Wikipedia.
         https://en.wikipedia.org/wiki/Sequential_proportional_approval_voting
-    '''
+    """
     def evaluate(self,
                  votes: Dict[FrozenSet[Candidate], int],
                  n_seats: int,
                  ) -> List[Candidate]:
-        '''Select candidates by sequential proportional approval.
+        """Select candidates by sequential proportional approval.
 
         :param votes: Approval votes.
         :param n_seats: Number of candidates to be elected.
         :returns: Selected candidates ordered as they were selected in the
             successive iterations.
-        '''
+        """
         elected = []
         while len(elected) < n_seats:
             round_votes = collections.defaultdict(int)
@@ -170,7 +170,7 @@ class SequentialProportionalApproval:
 
 @simple_serialization
 class QuotaSelector:
-    '''Quota threshold (plurality) selector.
+    """Quota threshold (plurality) selector.
 
     Elects candidates with more (or also equally many, depending on
     *accept_equal*) votes than the specified quota.
@@ -200,7 +200,7 @@ class QuotaSelector:
             :class:`votelib.evaluate.core.VotingSystemError`,
         -   ``'select'``: select the candidates with the most votes (possibly
             producing ties when they are equal).
-    '''
+    """
     def __init__(self,
                  quota_function: Union[
                      str, Callable[[int, int], Number]

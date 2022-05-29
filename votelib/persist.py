@@ -1,3 +1,4 @@
+"""Serialize and deserialize voting systems from/to JSON (dictionary) form."""
 
 import sys
 import inspect
@@ -12,7 +13,7 @@ ZERO_PARAMS: List[str] = ['args', 'kwargs']
 
 
 def simple_serialization(class_: type) -> type:
-    '''A decorator to provide a simple to_dict() serialization method.
+    """A decorator to provide a simple to_dict() serialization method.
 
     The resulting method will serialize all object attributes corresponding
     to the class's constructor parameter names. Therefore, this decorator
@@ -20,7 +21,7 @@ def simple_serialization(class_: type) -> type:
     unchanged (or in any other form acceptable to its constructor).
 
     :param class_: The class to add the method to.
-    '''
+    """
     if hasattr(class_, 'serialize_params'):
         param_names = class_.serialize_params
     else:

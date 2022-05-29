@@ -3,7 +3,7 @@
 The STV (or STV.pm) files contain cast votes in a ranked election and,
 optionally, an exact definition of an election system. [#stvlob]_
 
-.. [#wpav] "STV File Format".
+.. [#stvlob] "STV File Format".
     https://lobitos.net/voting/format.html
 """
 import re

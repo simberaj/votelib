@@ -1,4 +1,4 @@
-'''Objects to transfer votes between candidates for transferable vote systems.
+"""Objects to transfer votes between candidates for transferable vote systems.
 
 Transfers of votes from eliminated and elected candidates to candidates staying
 in the contest are an essential part of any transferable vote system,
@@ -9,7 +9,7 @@ There are many variants how to achieve this, some are implemented here.
 NOTE: The :class:`VoteTransferer` interface is provisional and may be changed
 in the future, chiefly to accommodate a wider range of transfer methods (Meek,
 Wright...)
-'''
+"""
 
 import sys
 import abc
@@ -35,7 +35,7 @@ def ranked_next(vote: RankedVoteType,
                 cand: Candidate,
                 allowed: Collection[Candidate],
                 ) -> FrozenSet[Candidate]:
-    '''Select the candidate(s) ranked in the vote after the given candidate.
+    """Select the candidate(s) ranked in the vote after the given candidate.
 
     :param vote: The ranked vote to examine.
     :param cand: The candidate to look after.
@@ -44,7 +44,7 @@ def ranked_next(vote: RankedVoteType,
     :returns: Candidates ranked after cand. Will be empty if cand was ranked
         last or is not present in the vote. Will only have multiple members
         if the ranked vote contains a shared rank after cand.
-    '''
+    """
     # Iterate through the vote until we find cand. At him, set take_next to
     # True to return the candidates ranked next.
     take_next = False
@@ -70,7 +70,7 @@ def distribute_n_random(cand_weights: Dict[Any, Number],
                         n: int,
                         limit_by_weight: bool = False,
                         ) -> Dict[Any, int]:
-    '''Distribute n randomly among candidates with weighted probabilities.
+    """Distribute n randomly among candidates with weighted probabilities.
 
     :param cand_weights: Candidates and their weights.
     :param n: Number to distribute.
@@ -78,7 +78,7 @@ def distribute_n_random(cand_weights: Dict[Any, Number],
         is limited by the value of their weight.
     :returns: A dictionary mapping candidates to their assigned quantities.
         The quantities sum to n.
-    '''
+    """
     candidates, weights = zip(*cand_weights.items())
     total_weight = sum(weights)
     if isinstance(total_weight, Fraction):
@@ -111,18 +111,18 @@ def distribute_n_random(cand_weights: Dict[Any, Number],
 
 
 class VoteTransferer(metaclass=abc.ABCMeta):
-    '''An abstract base class for vote transferers.
+    """An abstract base class for vote transferers.
 
     Vote transferers must provide a `subtract()` method that subtracts votes
     from elected candidates and a `transfer()` method that redistributes
     votes for some candidates to those remaining in the contest.
-    '''
+    """
     @abc.abstractmethod
     def subtract(self,
                  allocation: RankedVoteAllocation,
                  elected: Dict[Candidate, int],
                  ) -> RankedVoteAllocation:
-        '''Remove votes from elected candidates according to the quota.
+        """Remove votes from elected candidates according to the quota.
 
         :param allocation: Current allocation of ranked votes to candidates.
             The votes allocated to elected candidates will be lowered by the
@@ -131,7 +131,7 @@ class VoteTransferer(metaclass=abc.ABCMeta):
             were elected (or multiples thereof, if they were awarded multiple
             seats). These quotas should be removed from the candidates'
             votes (because so many votes were used).
-        '''
+        """
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -139,13 +139,13 @@ class VoteTransferer(metaclass=abc.ABCMeta):
                  allocation: RankedVoteAllocation,
                  candidates: List[Candidate],
                  ) -> RankedVoteAllocation:
-        '''Transfer votes from eliminated or fully elected candidates.
+        """Transfer votes from eliminated or fully elected candidates.
 
         :param allocation: Current allocation of ranked votes to candidates.
             The votes allocated to specified candidates will be reallocated
             to other candidates.
         :param candidates: Candidates no longer continuing in the contest.
-        '''
+        """
         raise NotImplementedError
 
 
@@ -164,14 +164,14 @@ class SimpleVoteTransferer(VoteTransferer):
                  allocation: RankedVoteAllocation,
                  candidates: List[Candidate],
                  ) -> RankedVoteAllocation:
-        '''Transfer votes from eliminated or fully elected candidates.
+        """Transfer votes from eliminated or fully elected candidates.
 
         :param allocation: Current allocation of ranked votes to candidates.
             The votes allocated to specified candidates will be reallocated
             to other candidates that are present in the allocation, or
             reassigned to the None key as exhausted ballots.
         :param candidates: Candidates to be removed from the allocation.
-        '''
+        """
         allocation = {cand: alloc.copy() for cand, alloc in allocation.items()}
         to_remove = [cand for cand in allocation if cand in candidates]
         continuing = [
@@ -225,7 +225,7 @@ class SimpleVoteTransferer(VoteTransferer):
 
 @simple_serialization
 class Hare(SimpleVoteTransferer):
-    '''Hare (random ballot selection) vote transferer.
+    """Hare (random ballot selection) vote transferer.
 
     This is the variant used (AFAIK) in Irish lower house legislative elections
     (Dáil Éireann).
@@ -238,7 +238,7 @@ class Hare(SimpleVoteTransferer):
     candidates sharing the rank.
 
     :param seed: Seed for the random generator.
-    '''
+    """
     def __init__(self,
                  seed: Optional[int] = None,
                  ):
@@ -285,7 +285,7 @@ class Hare(SimpleVoteTransferer):
 
 @simple_serialization
 class Gregory(SimpleVoteTransferer):
-    '''Gregory (fractional) vote transferer.
+    """Gregory (fractional) vote transferer.
 
     The variant used is the Weighted Inclusive Gregory Method (WIGM) used e.g.
     in Scottish local government elections.
@@ -300,7 +300,7 @@ class Gregory(SimpleVoteTransferer):
 
     The implementation produces exact fractional votes. Rounding rules are not
     implemented yet.
-    '''
+    """
     def _subtract(self,
                   cand_alloc: Dict[RankedVoteType, Fraction],
                   n_sub: Fraction,

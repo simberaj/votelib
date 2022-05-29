@@ -1,8 +1,8 @@
-'''Converters between vote and result formats.
+"""Converters between vote and result formats.
 
 These objects have a `convert()` method that converts between different formats
 of votes or election results.
-'''
+"""
 
 import collections
 import statistics
@@ -20,8 +20,9 @@ import votelib.candidate
 import votelib.util
 import votelib.vote
 from votelib.candidate import \
-    Candidate, Constituency, IndividualElectionOption, ElectionParty
-from votelib.vote import RankedVoteType, ScoreVoteType
+    Candidate, Constituency, IndividualElectionOption, ElectionParty, \
+    IndividualToPartyMapper
+from votelib.vote import RankedVoteType, ScoreVoteType, VoteSubsetter
 from votelib.component import rankscore
 from votelib.persist import simple_serialization
 
@@ -48,7 +49,7 @@ class Converter:
 # Aggregators from more complicated votes to simple magnitudes
 @simple_serialization
 class ApprovalToSimpleVotes:
-    '''Aggregate approval votes to simple votes.
+    """Aggregate approval votes to simple votes.
 
     Aggregate votes for candidate sets (approval votes) to separate votes
     for individual candidates. Useful for example in approval voting.
@@ -62,14 +63,14 @@ class ApprovalToSimpleVotes:
 
     .. [#wav] "Approval voting", Wikipedia.
         https://en.wikipedia.org/wiki/Approval_voting
-    '''
+    """
     def __init__(self, split: bool = False):
         self.split = split
 
     def convert(self,
                 votes: Dict[FrozenSet[Candidate], int]
                 ) -> Dict[Candidate, Number]:
-        '''Convert approval votes to simple votes.'''
+        """Convert approval votes to simple votes."""
         agg_votes = collections.defaultdict(int)
         for bulk, n_votes in votes.items():
             if self.split:
@@ -81,12 +82,12 @@ class ApprovalToSimpleVotes:
 
 @simple_serialization
 class ScoreToSimpleVotes:
-    '''Aggregate scores (cardinal votes) to simple votes.
+    """Aggregate scores (cardinal votes) to simple votes.
 
     Useful for score voting (range voting) systems. Note that, if the usual
-    central value function such as mean or median are used, this does not
+    central value functions such as mean or median are used, this does not
     give scores that could be passed to ordinary magnitude-based evaluators
-    since they do not scale with the number of voters.
+    since mean/median scores do not scale with the number of voters.
 
     This can be used directly in combination with a simple-vote plurality
     evaluator but is also a component in several cardinal vote evaluators.
@@ -108,15 +109,17 @@ class ScoreToSimpleVotes:
         specified by their names.
     :param min_count: Minimum count of voter scores for the candidate to be
         considered. Candidates below this threshold will be assigned
-        bottom_value.
+        bottom_value. This is used in some systems to prevent an unknown
+        upset candidate to win by high score mean although they were scored
+        only by a handful of highly dedicated voters.
     :param truncation: Fraction (if lower than 1) or count (if at least 1)
         of lowest and highest scores to disregard before aggregating, to
         stabilize the result. (Both ends are trimmed using this, so the
-        number/fraction of scores disregarded is twice the count/fraction).
+        number/fraction of scores disregarded is twice the count/fraction.)
     :param bottom_value: Value to assign to candidates with less voter scores
         than min_count. This would usually be the lowest possible aggregate
         score.
-    '''
+    """
     FUNCTION_NAMESPACES = [
         statistics,
         builtins,
@@ -157,17 +160,17 @@ class ScoreToSimpleVotes:
     def convert(self,
                 votes: Dict[ScoreVoteType, int],
                 ) -> Dict[Candidate, Any]:
-        '''Convert score votes to simple votes.
+        """Convert score votes to simple votes.
 
         :param votes: Uncorrected score votes.
         :returns: A mapping from candidates to their aggregate scores.
-        '''
+        """
         return self.aggregate(self.corrected_scores(votes))
 
     def corrected_scores(self,
                          votes: Dict[ScoreVoteType, int],
                          ) -> Dict[Candidate, Dict[Any, int]]:
-        '''Correct score votes to an intermediate format.
+        """Correct score votes to an intermediate format.
 
         This forms the first part of the conversion (the second is
         :meth:`aggregate`) and is exposed independently to allow for repeated
@@ -181,7 +184,7 @@ class ScoreToSimpleVotes:
         :returns: Corrected scores in a nested dictionary (candidates are
             mapped to dictionaries mapping score values to numbers of their
             occurrences).
-        '''
+        """
         scores = collections.defaultdict(lambda: collections.defaultdict(int))
         for one_vote, n in votes.items():
             for cand, score in one_vote:
@@ -195,20 +198,20 @@ class ScoreToSimpleVotes:
     def aggregate(self,
                   scores: Dict[Candidate, Dict[Any, int]]
                   ) -> Dict[Candidate, Any]:
-        '''Aggregate corrected score votes to scores per candidate.
+        """Aggregate corrected score votes to scores per candidate.
 
         :param scores: Corrected scores in an intermediate format of a nested
             dict (candidates are mapped to dictionaries mapping score values to
             numbers of their occurrences).
         :returns: A mapping from candidates to their aggregate scores.
-        '''
+        """
         return {
             cand: self.aggregate_one(cscores)
             for cand, cscores in scores.items()
         }
 
     def aggregate_one(self, cscores: Dict[Any, int]) -> Any:
-        '''Aggregate corrected scores for a candidate to a single score.'''
+        """Aggregate corrected scores for a candidate to a single score."""
         return self.function([
             score for score, count in cscores.items() for i in range(count)
         ])
@@ -251,15 +254,15 @@ class ScoreToSimpleVotes:
 
 @simple_serialization
 class RankedToFirstPreference:
-    '''Aggregate ranked votes to simple votes, taking each voter's first choice.
+    """Aggregate ranked votes to simple votes, taking each voter's first choice.
 
     This is useful to determine the plurality winner in ranked choice voting
     systems.
-    '''
+    """
     def convert(self,
                 votes: Dict[RankedVoteType, int],
                 ) -> Dict[Candidate, int]:
-        '''Convert ranked votes to simple votes by taking first choices.'''
+        """Convert ranked votes to simple votes by taking first choices."""
         output = collections.defaultdict(int)
         for ranking, n_votes in votes.items():
             if ranking:
@@ -268,18 +271,37 @@ class RankedToFirstPreference:
 
 
 @simple_serialization
-class RankedToPresenceCounts:
-    '''Count candidate occurrences in ranked votes regardless of rank.
+class RankedToFirstNPreferences:
+    """Aggregate ranked votes to approval votes, taking first N choices.
 
-    Returns simple votes. The candidates will be ordered in the order of the
+    :param n_first: Number of top choices to take from each ballot.
+    """
+    def __init__(self, n_first: int):
+        self.n_first = n_first
+
+    def convert(self,
+                votes: Dict[RankedVoteType, int],
+                ) -> Dict[Candidate, int]:
+        output = collections.defaultdict(int)
+        for ranking, n_votes in votes.items():
+            if ranking:
+                output[frozenset(ranking[:self.n_first])] += n_votes
+        return dict(output)
+
+
+@simple_serialization
+class RankedToPresenceCounts:
+    """Count candidate occurrences in ranked votes regardless of rank.
+
+    Returns simple votes. The dictionary will be ordered in the order of the
     ranked votes - first, all candidates appearing on any first rank will be
     listed in the order of their first such votes, then all candidates
     that appear on second and lower ranks only, etc.
-    '''
+    """
     def convert(self,
                 votes: Dict[RankedVoteType, Number],
                 ) -> Dict[Candidate, Number]:
-        '''Convert ranked votes to simple votes, disregarding rank.'''
+        """Convert ranked votes to simple votes, disregarding rank."""
         output = collections.defaultdict(int)
         for cand, rank_i, n_votes in votelib.util.all_rankings(votes):
             output[cand] += votes
@@ -288,11 +310,11 @@ class RankedToPresenceCounts:
 
 @simple_serialization
 class RankedToApprovalVotes:
-    '''Convert ranked votes to approval votes (disregarding rank).
+    """Convert ranked votes to approval votes (disregarding rank).
 
     Returns approval (set) votes by lumping together all candidates ranked on
     a particular ballot regardless of rank.
-    '''
+    """
     def convert(self,
                 votes: Dict[RankedVoteType, Number],
                 ) -> Dict[FrozenSet[Candidate], Number]:
@@ -310,10 +332,11 @@ class RankedToApprovalVotes:
 
 @simple_serialization
 class RankedToPositionalVotes:
-    '''Aggregate ranked votes to simple votes.
+    """Aggregate ranked votes to simple votes.
 
     Useful for Borda count systems. Assigns a score to each rank and then
-    sums the scores.
+    sums the scores. The complete Borda count system is obtained by coupling
+    this converter with the Plurality evaluator.
 
     :param rank_scorer: A rank scorer that determines which score to assign to
         which rank through its `scores()` method.
@@ -322,7 +345,7 @@ class RankedToPositionalVotes:
     :param unranked_scoring: What score to assign to candidates not ranked by
         the given voter. So far only the `'zero'` option, which assigns a score
         of zero, is supported.
-    '''
+    """
     def __init__(self,
                  rank_scorer: rankscore.RankScorer,
                  unranked_scoring: str = 'zero',
@@ -335,7 +358,7 @@ class RankedToPositionalVotes:
     def convert(self,
                 votes: Dict[RankedVoteType, int],
                 ) -> Dict[Candidate, Number]:
-        '''Convert ranked votes to simple votes by scoring their positions.'''
+        """Convert ranked votes to simple votes by scoring their positions."""
         all_candidates = votelib.util.all_ranked_candidates(votes)
         if hasattr(self.rank_scorer, 'set_n_candidates'):
             self.rank_scorer.set_n_candidates(len(all_candidates))
@@ -359,7 +382,7 @@ class RankedToPositionalVotes:
 
 @simple_serialization
 class RankedToCondorcetVotes:
-    '''Aggregate ranked votes to counts of pairwise wins.
+    """Aggregate ranked votes to counts of pairwise wins.
 
     Basic component for Condorcet methods. For each ballot that ranks a pair
     of candidates in a given order, adds one to the count of the first
@@ -368,14 +391,14 @@ class RankedToCondorcetVotes:
     :param unranked_at_bottom: Whether to consider candidates not ranked on a
         ballot as being ranked last. If False, these candidates are not
         considered (the voter is assumed not to have any preferences there).
-    '''
+    """
     def __init__(self, unranked_at_bottom: bool = True):
         self.unranked_at_bottom = unranked_at_bottom
 
     def convert(self,
                 votes: Dict[RankedVoteType, int],
                 ) -> Dict[Tuple[Candidate, Candidate], int]:
-        '''Convert ranked votes to counts of pairwise wins.'''
+        """Convert ranked votes to counts of pairwise wins."""
         all_cands = frozenset(votelib.util.all_ranked_candidates(votes))
         counts = collections.defaultdict(int)
         for ranking, n_votes in votes.items():
@@ -407,7 +430,7 @@ class RankedToCondorcetVotes:
 
 @simple_serialization
 class ScoreToRankedVotes:
-    '''Convert score votes to ranked votes.
+    """Convert score votes to ranked votes.
 
     This is useful to employ ranked voting methods for run-off in some score
     voting systems to reduce their susceptibility to tactical voting (e.g. STAR
@@ -416,7 +439,7 @@ class ScoreToRankedVotes:
     :param unscored_value: Score to give to a candidate that was not assigned
         a score by the voter. None means such ballots will not be considered
         for the candidate. A callable is not accepted.
-    '''
+    """
     def __init__(self,
                  unscored_value: Union[str, Number, None] = None,
                  ):
@@ -427,17 +450,18 @@ class ScoreToRankedVotes:
     def convert(self,
                 votes: Dict[ScoreVoteType, int],
                 ) -> Dict[RankedVoteType, int]:
-        '''Convert score votes to ranked votes.
+        """Convert score votes to ranked votes.
 
         :param votes: Score votes.
-        '''
+        """
         all_candidates = frozenset(
             cand for vote, n_votes in votes.items() for cand, score in vote
         )
-        return {
-            self.convert_one(vote, all_candidates): n_votes
-            for vote, n_votes in votes.items()
-        }
+        output = collections.defaultdict(int)
+        for scored, n_votes in votes.items():
+            ranked = self.convert_one(scored, all_candidates)
+            output[ranked] += n_votes
+        return dict(output)
 
     def convert_one(self,
                     vote: ScoreVoteType,
@@ -459,53 +483,74 @@ class ScoreToRankedVotes:
         return tuple(reversed(ranked))
 
 
+@simple_serialization
+class ScoreToApprovalVotesThreshold:
+    """Convert score votes to approval votes by a score approval threshold.
+
+    Only approves candidates whose score is numerically greater than or equal
+    to the specified threshold.
+    """
+    def __init__(self, threshold: Number):
+        self.threshold = threshold
+
+    def convert(self,
+                votes: Dict[ScoreVoteType, int],
+                ) -> Dict[FrozenSet[Candidate], int]:
+        approvals = collections.defaultdict(int)
+        for vote, n_votes in votes.items():
+            approved = frozenset(
+                cand for cand, score in vote if score >= self.threshold
+            )
+            if approved:
+                approvals[approved] += n_votes
+        return dict(approvals)
+
+
 # Inverters
 @simple_serialization
 class InvertedSimpleVotes:
-    '''Vote inverter to represent negative simple votes.
+    """Vote inverter to represent negative simple votes.
 
     In some voting systems, voters vote against rather than for candidates.
-    '''
+    """
     def convert(self,
                 votes: Dict[Candidate, Number]
                 ) -> Dict[Candidate, Number]:
-        '''Invert the count signs of single votes.'''
+        """Invert the count signs of single votes."""
         return {cand: -n_votes for cand, n_votes in votes.items()}
 
 
 # Individual/party converters
 @simple_serialization
 class IndividualToPartyVotes:
-    '''Aggregate votes for individual candidates to votes for their parties.
+    """Aggregate votes for individual candidates to votes for their parties.
 
     Useful for cases where votes are received by candidates but also considered
     by party, e.g. in panachage systems.
 
     :param mapper: A mapper object specifying the mapping from individuals to
         parties.
-    '''
-    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
+    """
+    DEFAULT_MAPPER = IndividualToPartyMapper()
 
-    def __init__(self,
-                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
-                 ):
+    def __init__(self, mapper: IndividualToPartyMapper = DEFAULT_MAPPER):
         self.mapper = mapper
 
     def convert(self,
                 votes: Dict[IndividualElectionOption, int],
                 ) -> Dict[ElectionParty, int]:
-        '''Convert individual simple votes to party-based simple votes.'''
+        """Convert individual simple votes to party-based simple votes."""
         aggregated = collections.defaultdict(int)
         for cand, n in votes.items():
             party = self.mapper(cand)
-            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
+            if party is not IndividualToPartyMapper.IGNORE:
                 aggregated[party] += n
         return dict(aggregated)
 
 
 @simple_serialization
 class IndividualToPartyResult:
-    '''Aggregate individual elected candidates to results for their parties.
+    """Aggregate individual elected candidates to results for their parties.
 
     Useful to determine party results in systems (or parts thereof) where
     party affiliation is not taken into account during evaluation,
@@ -515,29 +560,27 @@ class IndividualToPartyResult:
 
     :param mapper: A mapper object specifying the mapping from individuals to
         parties.
-    '''
-    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
+    """
+    DEFAULT_MAPPER = IndividualToPartyMapper()
 
-    def __init__(self,
-                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
-                 ):
+    def __init__(self, mapper: IndividualToPartyMapper = DEFAULT_MAPPER):
         self.mapper = mapper
 
     def convert(self,
                 results: List[IndividualElectionOption],
                 ) -> Dict[ElectionParty, int]:
-        '''Convert individual selection results to party-based counts.'''
+        """Convert individual selection results to party-based counts."""
         aggregated = collections.defaultdict(int)
         for cand in results:
             party = self.mapper(cand)
-            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
+            if party is not IndividualToPartyMapper.IGNORE:
                 aggregated[party] += 1
         return dict(aggregated)
 
 
 @simple_serialization
 class GroupVotesByParty:
-    '''Group individual simple votes to a dict nested by their parties.
+    """Group individual simple votes to a dict nested by their parties.
 
     Useful when the votes are provided for individual candidates and should be
     retained as such, but are evaluated per-party (e.g. in panachage
@@ -546,30 +589,28 @@ class GroupVotesByParty:
 
     :param mapper: A mapper object specifying the mapping from individuals to
         parties.
-    '''
+    """
 
-    DEFAULT_MAPPER = votelib.candidate.IndividualToPartyMapper()
+    DEFAULT_MAPPER = IndividualToPartyMapper()
 
-    def __init__(self,
-                 mapper: votelib.candidate.IndividualToPartyMapper = DEFAULT_MAPPER
-                 ):
+    def __init__(self, mapper: IndividualToPartyMapper = DEFAULT_MAPPER):
         self.mapper = mapper
 
     def convert(self,
                 votes: Dict[IndividualElectionOption, int],
                 ) -> Dict[ElectionParty, Dict[IndividualElectionOption, int]]:
-        '''Group individual simple votes by individuals' parties.'''
+        """Group individual simple votes by individuals' parties."""
         aggregated = {}
         for cand, n in votes.items():
             party = self.mapper(cand)
-            if party is not votelib.candidate.IndividualToPartyMapper.IGNORE:
+            if party is not IndividualToPartyMapper.IGNORE:
                 aggregated.setdefault(party, {})[cand] = n
         return aggregated
 
 
 @simple_serialization
 class SelectionToDistribution:
-    '''Adapt selection results to distribution (seat count) format.
+    """Adapt selection results to distribution (seat count) format.
 
     This can be used e.g. for majority bonus systems where the largest party
     gets a predetermined amount of additional reserved seats, or in
@@ -577,34 +618,34 @@ class SelectionToDistribution:
     constituency round.
 
     :param amount: How many votes to attribute to each winner of the selection.
-    '''
+    """
     def __init__(self, amount: Number = 1):
         self.amount = amount
 
     def convert(self, elected: List[Candidate]) -> Dict[Candidate, int]:
-        '''Convert selection results to distribution results.'''
+        """Convert selection results to distribution results."""
         return {cand: self.amount for cand in elected}
 
 
 @simple_serialization
 class MergedSelections:
-    '''Compile candidates elected in constituencies to a single result list.
+    """Compile candidates elected in constituencies to a single result list.
 
     The candidates are ordered by their positions in the district-wide result
     lists.
 
     Useful e.g. in mixed-member proportional systems to list all candidates
     elected in constituencies.
-    '''
+    """
     def convert(self, elected: Union[
                     Dict[Constituency, List[Candidate]],
                     List[List[Candidate]]
                 ]) -> List[Candidate]:
-        '''Compile constituency election results to a single result list.
+        """Compile constituency election results to a single result list.
 
         :param elected: Partial selection results in a list or dictionary;
             if a dictionary, its keys are ignored and values treated as a list.
-        '''
+        """
         # TODO: reconcile ties when merging?
         if hasattr(elected, 'values'):
             elected = elected.values()
@@ -614,7 +655,8 @@ class MergedSelections:
             key=(lambda cand: (-len(ranks[cand]), -sum(ranks[cand])))
         ))
 
-    def _get_ranks(self, elected: Iterable[List[Candidate]]):
+    @staticmethod
+    def _get_ranks(elected: Iterable[List[Candidate]]):
         ranks = {}
         for clist in elected:
             max_rank = len(clist) - 1
@@ -627,7 +669,7 @@ class MergedSelections:
 
 @simple_serialization
 class MergedDistributions:
-    '''Merge many distribution election results into one.
+    """Merge many distribution election results into one.
 
     Aggregates distribution election results from a list or dictionary of
     partial results (e.g. by constituency) into a single candidate-wise
@@ -635,17 +677,17 @@ class MergedDistributions:
     Neither reconciles ties nor preserves result ordering.
 
     Use :class:`VoteTotals` to aggregate votes.
-    '''
+    """
     def convert(self, elected: Union[
                     Dict[Constituency, Dict[Candidate, int]],
                     List[Dict[Candidate, int]]
                 ]) -> Dict[Candidate, int]:
-        '''Aggregate many distribution election results into one.
+        """Aggregate many distribution election results into one.
 
         :param elected: Partial distribution election results in a list or
             dictionary; if a dictionary, its keys are ignored and values
             treated as a list.
-        '''
+        """
         # TODO: reconcile ties when merging? keep result ordering?
         if hasattr(elected, 'values'):
             elected = elected.values()
@@ -658,19 +700,19 @@ class MergedDistributions:
 # Constituency-defined vote aggregators by party or district
 @simple_serialization
 class VoteTotals:
-    '''Count total votes/results for each candidate in all constituencies.
+    """Count total votes/results for each candidate in all constituencies.
 
     If votes of other type than simple are given, counts the totals of
     votes. Use :class:`MergedDistributions` to aggregate distribution election
     results.
-    '''
+    """
     def convert(self,
                 votes: Dict[Constituency, Dict[Any, int]],
                 ) -> Dict[Any, int]:
-        '''Count total votes for each candidate in all constituencies.
+        """Count total votes for each candidate in all constituencies.
 
         :param votes: Votes of any type.
-        '''
+        """
         all_districts = {}
         for dvotes in votes.values():
             votelib.util.add_dict_to_dict(all_districts, dvotes)
@@ -679,19 +721,19 @@ class VoteTotals:
 
 @simple_serialization
 class ConstituencyTotals:
-    '''Count total votes (or results) for all candidates in each constituency.
+    """Count total votes (or results) for all candidates in each constituency.
 
     Accepts any type of votes or distribution election results.
 
     Useful for apportionment of seats to districts.
-    '''
+    """
     def convert(self,
                 votes: Dict[Constituency, Dict[Any, int]],
                 ) -> Dict[Constituency, int]:
-        '''Return total votes for all candidates in each constituency.
+        """Return total votes for all candidates in each constituency.
 
         :param votes: Votes of any type, or distribution election results.
-        '''
+        """
         return {
             district: sum(dvotes.values())
             for district, dvotes in votes.items()
@@ -700,7 +742,7 @@ class ConstituencyTotals:
 
 @simple_serialization
 class PartyTotals:
-    '''Count total votes for parties from grouped votes for its candidates.
+    """Count total votes for parties from grouped votes for its candidates.
 
     Accepts any type of votes or distribution election results.
 
@@ -708,14 +750,14 @@ class PartyTotals:
     received by individual candidates (panachage) if the results are already
     grouped by party in a nested dictionary, e.g. after applying
     :class:`GroupVotesByParty`.
-    '''
+    """
     def convert(self,
                 votes: Dict[ElectionParty, Dict[Any, int]],
                 ) -> Dict[ElectionParty, int]:
-        '''Return total votes for all candidates of each party.
+        """Return total votes for all candidates of each party.
 
         :param votes: Votes of any type, or distribution election results.
-        '''
+        """
         return {
             party: sum(pvotes.values())
             for party, pvotes in votes.items()
@@ -724,23 +766,23 @@ class PartyTotals:
 
 @simple_serialization
 class ByConstituency:
-    '''Perform conversion for each constituency votes/results separately.
+    """Perform conversion for each constituency votes/results separately.
 
     :param converter: A converter to wrap. Will be called to convert votes (or
         results) for each constituency separately.
-    '''
+    """
     def __init__(self, converter: Converter):
         self.converter = converter
 
     def convert(self,
                 values: Dict[Constituency, Dict[Any, Any]],
                 ) -> Dict[Constituency, Dict[Any, Any]]:
-        '''Convert the votes/results for each constituency.
+        """Convert the votes/results for each constituency.
 
         :param values: Mapping of constituencies to votes or results. The
             keys of this dictionary will be transferred unchanged to the
             result, with their values converted by the wrapped converter.
-        '''
+        """
         return {
             district: self.converter.convert(dvalues)
             for district, dvalues in values.items()
@@ -749,7 +791,7 @@ class ByConstituency:
 
 @simple_serialization
 class InvalidVoteEliminator:
-    '''Only allow through votes that are declared valid by a given validator.
+    """Only allow through votes that are declared valid by a given validator.
 
     Calls the `validate()` method of the validator for each of the keys of the
     input dictionary; if an :class:`vote.VoteError` is raised, does not
@@ -757,15 +799,15 @@ class InvalidVoteEliminator:
 
     :param validator: The vote validator to use. Look for some in the
         :mod:`vote` module.
-    '''
+    """
     def __init__(self, validator: votelib.vote.VoteValidator):
         self.validator = validator
 
     def convert(self, votes: Dict[Any, int]) -> Dict[Any, int]:
-        '''Copy the votes dictionary, removing invalid votes.
+        """Copy the votes dictionary, removing invalid votes.
 
         If no invalid votes are detected, does not make a copy.
-        '''
+        """
         to_remove = []
         for one_vote in votes.keys():
             try:
@@ -781,7 +823,7 @@ class InvalidVoteEliminator:
 
 @simple_serialization
 class RoundedVotes:
-    '''Round vote counts to the given number of decimal digits.
+    """Round vote counts to the given number of decimal digits.
 
     In some systems, rounding of fractional values to a given number of digits
     is specified (e.g. Scottish STV). This rounds vote counts of any vote type
@@ -792,7 +834,7 @@ class RoundedVotes:
     :param round_method: A rounding method accepted by Python's ``decimal``
         module.
     :raises ValueError: If an invalid number of decimal digits is given.
-    '''
+    """
     def __init__(self, decimals: int, round_method=decimal.ROUND_HALF_UP):
         self.decimals = decimals
         self.round_method = round_method
@@ -822,14 +864,14 @@ class RoundedVotes:
         return _rounder
 
     def convert(self, votes: Dict[Any, Number]) -> Dict[Any, Decimal]:
-        '''Round all vote counts to the specified number of votes.
+        """Round all vote counts to the specified number of votes.
 
         The vote counts must be convertible to :class:`Decimal`
         (:class:`Fraction` and any types accepted by the decimal constructor
         are supported).
 
         :param votes: Votes whose counts should be rounded.
-        '''
+        """
         return {
             vote: self._rounder(n_votes) for vote, n_votes in votes.items()
         }
@@ -837,9 +879,9 @@ class RoundedVotes:
 
 @simple_serialization
 class SubsettedVotes:
-    '''Subset the votes to only concern a subset of candidates.
+    """Subset the votes to only concern a subset of candidates.
 
-    A wrapper over :class:`vote.VoteSubsetter` that takes the entire vote count
+    A wrapper over :class:`VoteSubsetter` that takes the entire vote count
     dictionary, not just a single vote object (key).
     Useful when some candidates should be excluded because they do not pass
     an electoral threshold, or when evaluating ties.
@@ -847,11 +889,11 @@ class SubsettedVotes:
     :param vote_subsetter: A vote subsetter that turns a single vote object
         (key) into a vote object that only concerns the specified candidates,
         with other candidates removed.
-    '''
+    """
     DEFAULT_SUBSETTER = votelib.vote.SimpleSubsetter()
 
     def __init__(self,
-                 vote_subsetter: votelib.vote.VoteSubsetter = DEFAULT_SUBSETTER,
+                 vote_subsetter: VoteSubsetter = DEFAULT_SUBSETTER,
                  depth: int = 0,
                  ):
         self.vote_subsetter = vote_subsetter
@@ -861,13 +903,13 @@ class SubsettedVotes:
                 votes: Dict[Any, Number],
                 subset: Collection[Candidate],
                 ) -> Dict[Any, Number]:
-        '''Subset the votes to only concern a subset of candidates.
+        """Subset the votes to only concern a subset of candidates.
 
         :param votes: Votes to be subsetted. Their type should be in accordance
             with the wrapped vote subsetter.
         :param subset: The only candidates that should be contained in the
             output.
-        '''
+        """
         return self._convert(votes, subset, depth=self.depth)
 
     def _convert(self,
@@ -894,3 +936,19 @@ RANKED_TO_SIMPLE: List[type] = [
     RankedToFirstPreference,
     RankedToPresenceCounts,
 ]
+
+
+@simple_serialization
+class Chain:
+    """Chain multiple vote converters after one another.
+
+    Applies the converters successively on a single vote dictionary.
+    """
+    def __init__(self, converters: List[Converter]):
+        self.converters = converters
+
+    def convert(self, votes: Dict[Any, Number]) -> Dict[Any, Number]:
+        output = votes
+        for conv in self.converters:
+            output = conv.convert(output)
+        return output

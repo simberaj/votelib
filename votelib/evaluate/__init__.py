@@ -1,4 +1,4 @@
-'''Evaluate the results of the elections.
+"""Evaluate the results of the elections.
 
 There are two basic election types - selections and distributions.
 In selections, each candidate (usually a physical person) is either
@@ -28,6 +28,6 @@ None of the evaluators validate vote correctness; use the tools in the
 
 .. [#rvasset] "Asset voting", Range voting.org.
     https://rangevoting.org/Asset.html
-'''
+"""
 
 from votelib.evaluate.core import *    # noqa

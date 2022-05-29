@@ -120,10 +120,19 @@ Composite evaluators
 .. autoclass:: votelib.evaluate.core.ByConstituency
    :members:
 
+.. autoclass:: votelib.evaluate.core.PreApportioned
+   :members:
+
+.. autoclass:: votelib.evaluate.core.RemovedApportionment
+   :members:
+
 .. autoclass:: votelib.evaluate.core.ByParty
    :members:
 
 .. autoclass:: votelib.evaluate.core.MultistageDistributor
+   :members:
+
+.. autoclass:: votelib.evaluate.core.UnusedVotesDistributor
    :members:
 
 .. autoclass:: votelib.evaluate.core.AdjustedSeatCount

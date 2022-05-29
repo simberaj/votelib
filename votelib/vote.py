@@ -1,4 +1,4 @@
-'''Vote type specifications and vote validators.
+"""Vote type specifications and vote validators.
 
 Vote types vary from system to system and are only loosely tied to the method
 of evaluation (usually, the richer vote types can be reduced to use simple
@@ -27,7 +27,7 @@ subclass of :class:`VoteError` (or :class:`CandidateError`, if a candidate
 contained in the vote is invalid).
 Some converter objects wrap these validators and catch these errors to remove
 invalid votes, for example.
-'''
+"""
 
 import abc
 from typing import Any, Tuple, FrozenSet, Dict, Union, Optional, Collection
@@ -41,18 +41,18 @@ from votelib.persist import simple_serialization
 
 
 class VoteError(Exception, metaclass=abc.ABCMeta):
-    '''A vote is invalid given the election rules.'''
+    """A vote is invalid given the election rules."""
     pass
 
 
 class VoteTypeError(VoteError):
-    '''A vote is of an invalid type.
+    """A vote is of an invalid type.
 
     E.g. ranked votes in place of simple votes.
 
     :param vtype: Vote type detected as invalid.
     :param expected: Vote type that was expected.
-    '''
+    """
     def __init__(self, vtype: type, expected: type = None):
         self.vtype = vtype
         self.expected = expected
@@ -63,14 +63,14 @@ class VoteTypeError(VoteError):
 
 
 class VoteMagnitudeError(VoteError):
-    '''A vote is too small or too large.
+    """A vote is too small or too large.
 
     :param value: Size of the vote that was found to be invalid.
     :param min_value: Minimum value permissible in the context.
     :param max_value: Maximum value permissible in the context.
     :param value_name: Role of the vote size (e.g. number of approval votes,
         number of ranked candidates...)
-    '''
+    """
     def __init__(self,
                  value: Number,
                  min_value: Optional[Number] = None,
@@ -93,13 +93,13 @@ class VoteMagnitudeError(VoteError):
 
 
 class VoteValueError(VoteError):
-    '''An explicitly given vote value is invalid.
+    """An explicitly given vote value is invalid.
 
     :param value: Value of the vote that is invalid.
     :param candidate: A candidate that the vote was given for. If None, a
         specific candidate could not be pinpointed.
     :param allowed: A spectrum of values that is allowed at the given point.
-    '''
+    """
     def __init__(self,
                  value: Any,
                  candidate: Optional[Candidate] = None,
@@ -130,13 +130,13 @@ NumBoundsTupleType = Tuple[Optional[Number], Optional[Number]]
 
 
 class VoteMagnitudeChecker:
-    '''A helper class to check if a value is in a specified range.
+    """A helper class to check if a value is in a specified range.
 
     :param bounds: A tuple with lower and upper bounds (inclusive) for the
         value to be checked. None means the respective bound is not checked.
     :param value_name: Name of the value to be checked (included in the error
         message).
-    '''
+    """
     def __init__(self,
                  bounds: NumBoundsTupleType = (None, None),
                  value_name: str = 'count',
@@ -152,22 +152,22 @@ class VoteMagnitudeChecker:
         }
 
     def __bool__(self) -> bool:
-        '''Return True if the checker contains any constraints to check.'''
+        """Return True if the checker contains any constraints to check."""
         return self._active
 
     def is_valid(self, value: Number) -> bool:
-        '''Return True if the value is within the given range.'''
+        """Return True if the value is within the given range."""
         return (
             (self.min_value is None or value >= self.min_value)
             and (self.max_value is None or value <= self.max_value)
         )
 
     def check(self, value: Number) -> None:
-        '''Check if the value is within the given range.
+        """Check if the value is within the given range.
 
         :raises VoteMagnitudeError: If the value is outside the given
             range.
-        '''
+        """
         if not self.is_valid(value):
             raise VoteMagnitudeError(
                 value, self.min_value, self.max_value, self.value_name
@@ -175,16 +175,16 @@ class VoteMagnitudeChecker:
 
 
 class VoteValidator(metaclass=abc.ABCMeta):
-    '''Validate that a single vote is valid under the election rules.
+    """Validate that a single vote is valid under the election rules.
 
     Base class, not intended for direct use.
-    '''
+    """
     @abc.abstractmethod
     def validate(self, vote: Any) -> None:
-        '''Check if the vote satisfies criteria given by the voting system.
+        """Check if the vote satisfies criteria given by the voting system.
 
         :raises NotImplementedError:
-        '''
+        """
         raise NotImplementedError
 
 
@@ -193,31 +193,31 @@ DEFAULT_NOMINATOR = votelib.candidate.BasicNominator()
 
 @simple_serialization
 class SimpleVoteValidator:
-    '''Validate a simple vote (voting directly for a single candidate).
+    """Validate a simple vote (voting directly for a single candidate).
 
     The candidate must be a valid atomic candidate object according to the
     nominator object specified.
 
     :param nominator: Nominator used to check candidates. The default uses only
         technical criteria specified by the :class:`Candidate` class.
-    '''
+    """
     def __init__(self,
                  nominator: votelib.candidate.Nominator = DEFAULT_NOMINATOR,
                  ):
         self.nominator = nominator
 
     def validate(self, vote: Candidate) -> None:
-        '''Check if the candidate is valid.
+        """Check if the candidate is valid.
 
         :param vote: Simple vote to be checked.
         :raises CandidateError: If the candidate is invalid.
-        '''
+        """
         self.nominator.validate(vote)
 
 
 @simple_serialization
 class ApprovalVoteValidator:
-    '''Validate an approval vote (voting for a number of candidates equally).
+    """Validate an approval vote (voting for a number of candidates equally).
 
     The vote must be a frozen set containing valid atomic candidates. The
     atomic candidates must not be tuples.
@@ -230,7 +230,7 @@ class ApprovalVoteValidator:
         number of candidates any vote can contain.
     :param nominator: Nominator used to check candidates. The default uses the
         technical criteria specified by the :class:`Candidate` class.
-    '''
+    """
     serialize_params = ['count_checker', 'nominator']
 
     def __init__(self,
@@ -244,7 +244,7 @@ class ApprovalVoteValidator:
         self.nominator = nominator
 
     def validate(self, vote: FrozenSet[Candidate]) -> None:
-        '''Check if the approval vote is valid.
+        """Check if the approval vote is valid.
 
         :param vote: Approval vote to be checked.
         :raises VoteTypeError: If the vote is not a frozen set.
@@ -252,7 +252,7 @@ class ApprovalVoteValidator:
             is invalid.
         :raises VoteMagnitudeError: If the number of candidates voted
             for is out of allowed bounds.
-        '''
+        """
         if not isinstance(vote, frozenset):
             raise VoteTypeError(vote, frozenset)
         for item in vote:
@@ -262,7 +262,7 @@ class ApprovalVoteValidator:
 
 @simple_serialization
 class RankedVoteValidator:
-    '''Validate a ranked vote (ranking of a number of candidates).
+    """Validate a ranked vote (ranking of a number of candidates).
 
     The vote must be a tuple of candidates or frozen sets thereof. Usage of
     sets indicates tied rankings, which are not common but allowed in some
@@ -285,7 +285,7 @@ class RankedVoteValidator:
         allowed to share any rank.
     :param nominator: Nominator used to check candidates. The default uses only
         technical criteria specified by the :class:`Candidate` class.
-    '''
+    """
     serialize_params = [
         'total_count_checker',
         'rank_vote_count_checkers',
@@ -325,7 +325,7 @@ class RankedVoteValidator:
         self.nominator = nominator
 
     def validate(self, vote: RankedVoteType) -> None:
-        '''Check if the ranked vote is valid.
+        """Check if the ranked vote is valid.
 
         :param vote: Ranked vote to be checked.
         :raises VoteTypeError: If the vote is not a tuple.
@@ -335,7 +335,7 @@ class RankedVoteValidator:
             is invalid.
         :raises VoteMagnitudeError: If the number of candidates (total
             or at particular ranking tier) is out of the specified bounds.
-        '''
+        """
         if not isinstance(vote, tuple):
             raise VoteTypeError(vote, tuple)
         total_votes = 0
@@ -405,7 +405,7 @@ class ScoreVoteValidator:
 
 @simple_serialization
 class EnumScoreVoteValidator(ScoreVoteValidator):
-    '''Validate an enumeration-based score vote.
+    """Validate an enumeration-based score vote.
 
     An enumeration-based score vote assigns scores from a predefined finite set
     to candidates. It should be represented as a frozen set of doubles
@@ -437,7 +437,7 @@ class EnumScoreVoteValidator(ScoreVoteValidator):
         allowed total score allocated to all candidates.
     :param nominator: Nominator used to check candidates. The default uses only
         technical criteria specified by the :class:`Candidate` class.
-    '''
+    """
     serialize_params = [
         'score_levels',
         'n_scorings_checker',
@@ -465,7 +465,7 @@ class EnumScoreVoteValidator(ScoreVoteValidator):
         self.score_levels = list(score_levels)
 
     def validate(self, vote: ScoreVoteType) -> bool:
-        '''Check if the enumeration-based score vote is valid.
+        """Check if the enumeration-based score vote is valid.
 
         :param vote: Score vote to be checked.
         :raises VoteTypeError: If the vote is not a frozen set.
@@ -476,7 +476,7 @@ class EnumScoreVoteValidator(ScoreVoteValidator):
             of the items in the vote is not a tuple pair.
         :raises VoteValueError: If any of the scores is not in the
             predefined set of allowed scores.
-        '''
+        """
         super().validate(vote)
         for cand, score in vote:
             if score not in self.score_levels:
@@ -485,7 +485,7 @@ class EnumScoreVoteValidator(ScoreVoteValidator):
 
 @simple_serialization
 class RangeVoteValidator(ScoreVoteValidator):
-    '''Validate a range (non-enumerative score) vote.
+    """Validate a range (non-enumerative score) vote.
 
     An range vote assigns scores from a predefined interval to candidates.
     It should be represented as a frozen set of doubles
@@ -514,7 +514,7 @@ class RangeVoteValidator(ScoreVoteValidator):
         allowed total score allocated to all candidates.
     :param nominator: Nominator used to check candidates. The default uses only
         technical criteria specified by the :class:`Candidate` class.
-    '''
+    """
     serialize_params = [
         'range_checker',
         'n_scorings_checker',
@@ -545,7 +545,7 @@ class RangeVoteValidator(ScoreVoteValidator):
         self.range_checker = range_checker
 
     def validate(self, vote: ScoreVoteType) -> bool:
-        '''Check if the range vote is valid.
+        """Check if the range vote is valid.
 
         :param vote: Range (score) vote to be checked.
         :raises VoteTypeError: If the vote is not a frozen set.
@@ -554,14 +554,14 @@ class RangeVoteValidator(ScoreVoteValidator):
         :raises VoteMagnitudeError: If the number of candidates scored,
             the total sum of scores or any single score is out of the specified
             bounds, or any of the items in the vote is not a tuple pair.
-        '''
+        """
         super().validate(vote)
         for cand, score in vote:
             self.range_checker.check(score)
 
 
 class VoteSubsetter(metaclass=abc.ABCMeta):
-    '''Abstract class for vote subsetters.
+    """Abstract class for vote subsetters.
 
     Vote subsetters reduce a single vote (object) to a smaller variant in which
     only a specified subset of candidates is featured.
@@ -574,7 +574,7 @@ class VoteSubsetter(metaclass=abc.ABCMeta):
     Subsetted votes are handy in some cases such as tiebreaking. If you need to
     subset an entire voting dictionary, wrap the vote subsetter into an
     :class:`votelib.convert.SubsettedVotes` instance.
-    '''
+    """
     @abc.abstractmethod
     def subset(self,
                vote: Any,
@@ -585,48 +585,48 @@ class VoteSubsetter(metaclass=abc.ABCMeta):
 
 @simple_serialization
 class SimpleSubsetter:
-    '''A subsetter for simple votes.'''
+    """A subsetter for simple votes."""
 
     def subset(self,
                vote: Candidate,
                subset: Collection[Candidate],
                ) -> Union[Candidate, None]:
-        '''Return vote if it is in subset, else None.'''
+        """Return vote if it is in subset, else None."""
         return vote if vote in subset else None
 
 
 @simple_serialization
 class ApprovalSubsetter:
-    '''A subsetter for approval votes.'''
+    """A subsetter for approval votes."""
 
     def subset(self,
                vote: FrozenSet[Candidate],
                subset: Collection[Candidate],
                ) -> FrozenSet[Candidate]:
-        '''Return a subset of the approval vote by intersection.
+        """Return a subset of the approval vote by intersection.
 
         :returns: An intersection of the vote with the candidate subset.
-        '''
+        """
         return vote.intersection(subset)
 
 
 @simple_serialization
 class RankedSubsetter:
-    '''A subsetter for ranked votes.'''
+    """A subsetter for ranked votes."""
     # TODO: implement keeping ranks as skipped
 
     def subset(self,
                vote: RankedVoteType,
                subset: Collection[Candidate],
                ) -> RankedVoteType:
-        '''Return a ranked vote ranking only the candidates in the subset.
+        """Return a ranked vote ranking only the candidates in the subset.
 
         Ranks that contain only candidates outside the subset are removed and
         the list is shortened. Shared ranks that only have one of their
         candidates in the subset are converted to simple ranks.
 
         :returns: A ranked vote ranking only the candidates in the subset.
-        '''
+        """
         sub_ranking = []
         for rank in vote:
             if isinstance(rank, collections.abc.Set):
@@ -643,18 +643,18 @@ class RankedSubsetter:
 
 @simple_serialization
 class ScoreSubsetter:
-    '''A subsetter for score votes.'''
+    """A subsetter for score votes."""
 
     def subset(self,
                vote: ScoreVoteType,
                subset: Collection[Candidate],
                ) -> ScoreVoteType:
-        '''Return a score vote scoring only the candidates in the subset.
+        """Return a score vote scoring only the candidates in the subset.
 
         Scores for candidates outside the subset are removed.
 
         :returns: A score vote scoring only the candidates in the subset.
-        '''
+        """
         sub_score = set()
         for cand, score in vote:
             if cand in subset:

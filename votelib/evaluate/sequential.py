@@ -1,9 +1,9 @@
-'''Evaluators that operate sequentially on ranked votes.
+"""Evaluators that operate sequentially on ranked votes.
 
 This hosts mainly the transferable vote evaluator
 (:class:`TransferableVoteSelector`) but also its less known relative,
 :class:`PreferenceAddition`.
-'''
+"""
 import operator
 import sys
 import itertools
@@ -13,6 +13,7 @@ from fractions import Fraction
 from typing import Any, List, Dict, Tuple, Union, Callable, Optional
 from numbers import Number
 
+import votelib.convert
 import votelib.persist
 import votelib.util
 import votelib.component.quota
@@ -22,6 +23,8 @@ import votelib.evaluate.condorcet
 from votelib.candidate import Candidate
 from votelib.vote import RankedVoteType
 from votelib.persist import simple_serialization
+from votelib.component.transfer import VoteTransferer
+from votelib.evaluate.condorcet import SeatlessSelector, SmithSet
 
 RankedVoteAllocation = votelib.component.transfer.RankedVoteAllocation
 
@@ -29,10 +32,12 @@ INF = float('inf')
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_TRANSFERER = votelib.component.transfer.Gregory()
+
 
 @simple_serialization
 class TransferableVoteDistributor:
-    '''Select candidates by eliminating and transfering votes among them.
+    """Select candidates by eliminating and transfering votes among them.
 
     This is the evaluator for transferable vote selection (since the evaluator
     does not concern itself with restrictions on allowed votes, it covers not
@@ -87,11 +92,9 @@ class TransferableVoteDistributor:
         If False, as soon as the number of unallocated seats equals the
         number of remaining candidates, these are all elected regardless
         of reaching the quota.
-    '''
+    """
     def __init__(self,
-                 transferer: Union[
-                     str, votelib.component.transfer.VoteTransferer
-                 ] = 'Gregory',
+                 transferer: Union[str, VoteTransferer] = DEFAULT_TRANSFERER,
                  retainer: Optional[votelib.evaluate.core.Selector] = None,
                  eliminate_step: Optional[int] = -1,
                  quota_function: Union[
@@ -119,7 +122,7 @@ class TransferableVoteDistributor:
                  prev_gains: Dict[Candidate, int] = {},
                  max_seats: Dict[Candidate, int] = {},
                  ) -> Dict[Candidate, int]:
-        '''Allocate seats to candidates by transferable vote.
+        """Allocate seats to candidates by transferable vote.
 
         :param votes: Ranked votes. Equal rankings are allowed.
         :param n_seats: Number of seats to allocate to candidates.
@@ -127,7 +130,7 @@ class TransferableVoteDistributor:
             election rounds to be subtracted from the result awarded here.
         :param max_seats: Maximum number of seats that the given
             candidate/party can obtain in total (including previous gains).
-        '''
+        """
         return self.nth_count(
             votes,
             n_seats,
@@ -143,7 +146,7 @@ class TransferableVoteDistributor:
                    prev_gains: Dict[Candidate, int] = {},
                    max_seats: Dict[Candidate, int] = {},
                    ) -> Tuple[RankedVoteAllocation, Dict[Candidate, int]]:
-        '''Advance the transferable voting process by one iteration (count).
+        """Advance the transferable voting process by one iteration (count).
 
         :param allocation: Current allocation of ranked votes to candidates
             still contesting the remaining seats. Eliminated candidates are
@@ -159,7 +162,7 @@ class TransferableVoteDistributor:
         :returns: A 2-tuple containing the new allocation of votes and
             a mapping of candidates to newly assigned seats (might be empty if
             no seats were awarded on this count).
-        '''
+        """
         n_rem_seats = n_seats - sum(prev_gains.values())
         totals = allocation_totals(allocation)
         avail_seats = {
@@ -223,14 +226,14 @@ class TransferableVoteDistributor:
                   prev_gains: Dict[Candidate, int] = {},
                   max_seats: Dict[Candidate, int] = {},
                   ) -> Tuple[RankedVoteAllocation, Dict[Candidate, int]]:
-        '''Get the intermediate counting state at a given iteration (count).
+        """Get the intermediate counting state at a given iteration (count).
 
         :param votes: Ranked votes. Equal rankings are allowed.
         :param n_seats: Number of candidates to select.
         :param count_number: 1-indexed count number.
         :returns: A 2-tuple containing the allocation of votes after the given
             count and a list of elected candidates so far (might be empty).
-        '''
+        """
         allocation = initial_allocation(votes, self.transferer)
         total_n_votes = sum(votes.values())    # needed for quota
         new_allocation = None
@@ -346,10 +349,9 @@ class TransferableVoteDistributor:
 
 
 def initial_allocation(votes: Dict[RankedVoteType, Number],
-                       transferer: votelib.component.transfer.VoteTransferer =
-                           votelib.component.transfer.Gregory(),
+                       transferer: VoteTransferer = DEFAULT_TRANSFERER,
                        ) -> RankedVoteAllocation:
-    '''Allocate votes by first preference.
+    """Allocate votes by first preference.
 
     :param votes: Ranked votes.
     :param transferer: A :class:`votelib.component.transfer.VoteTransferer`
@@ -357,7 +359,7 @@ def initial_allocation(votes: Dict[RankedVoteType, Number],
     :returns: The votes dictionary separated into subdictionaries keyed by
         candidate to whom the votes are allocated. A candidate with no
         first preference votes will be assigned to an empty dictionary.
-    '''
+    """
     first_prefs = {
         cand: {} for cand in votelib.util.all_ranked_candidates(votes)
     }
@@ -427,7 +429,7 @@ class TransferableVoteSelector:
                    total_n_votes: int,
                    elected: List[Candidate] = [],
                    ) -> Tuple[RankedVoteAllocation, List[Candidate]]:
-        '''Advance the transferable voting process by one iteration (count).
+        """Advance the transferable voting process by one iteration (count).
 
         :param allocation: Current allocation of ranked votes to candidates
             still contesting the remaining seats.
@@ -439,7 +441,7 @@ class TransferableVoteSelector:
         :returns: A 2-tuple containing the new allocation of votes and
             a mapping of candidates to newly assigned seats (might be empty if
             no seats were awarded on this count).
-        '''
+        """
         all_cands = set()
         for cand, alloc_votes in allocation:
             all_cands.update(votelib.util.all_ranked_candidates(alloc_votes))
@@ -457,14 +459,14 @@ class TransferableVoteSelector:
                   n_seats: int = 1,
                   count_number: int = 1,
                   ) -> Tuple[RankedVoteAllocation, List[Candidate]]:
-        '''Get the intermediate counting state at a given iteration (count).
+        """Get the intermediate counting state at a given iteration (count).
 
         :param votes: Ranked votes. Equal rankings are allowed.
         :param n_seats: Number of candidates to select.
         :param count_number: 1-indexed count number.
         :returns: A 2-tuple containing the allocation of votes after the given
             count and a list of elected candidates so far (might be empty).
-        '''
+        """
         all_cands = votelib.util.all_ranked_candidates(votes)
         allocation, elected_dict = self._inner.nth_count(
             votes,
@@ -488,7 +490,7 @@ class TransferableVoteSelector:
 # Gradual preference addition
 @simple_serialization
 class PreferenceAddition:
-    '''Evaluates ranked votes by stepwise addition of lower preferences.
+    """Evaluates ranked votes by stepwise addition of lower preferences.
 
     Each candidate starts with their first-preference votes and
     lower-preference votes are added to them until a sufficient amount of
@@ -506,7 +508,7 @@ class PreferenceAddition:
     :param split_equal_rankings: Whether to split votes having multiple
         alternatives at the same rank, or to add the whole amount to each
         of these alternatives.
-    '''
+    """
     def __init__(self,
                  coefficients: Union[
                      List[Number],
@@ -521,11 +523,11 @@ class PreferenceAddition:
                  votes: Dict[RankedVoteType, int],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates by sequential preference addition.
+        """Select candidates by sequential preference addition.
 
         :param votes: Ranked votes.
         :param n_seats: Number of candidates to be elected.
-        '''
+        """
         if self.split_equal_rankings:
             votes = self._decouple_equal_rankings(votes)
         total_votes = collections.defaultdict(int)
@@ -624,7 +626,7 @@ RANKED_TO_CONDORCET = votelib.convert.RankedToCondorcetVotes()
 
 
 class TidemanAlternative:
-    '''Tideman alternative selector (Alternative Smith/Schwartz). [#tidaltw]_
+    """Tideman alternative selector (Alternative Smith/Schwartz). [#tidaltw]_
 
     Uses a Smith or Schwartz set selector; if the set has multiple members,
     eliminates one candidate by transferable vote (instant-runoff) and reruns.
@@ -639,10 +641,9 @@ class TidemanAlternative:
     .. [#gacondo] Green-Armytage, James. "Four Condorcet-Hare Hybrid Methods
         for Single-Winner Elections", Voting Matters.
         http://www.votingmatters.org.uk/ISSUE29/I29P1.pdf
-    '''
+    """
     def __init__(self,
-                 set_selector: votelib.evaluate.condorcet.SeatlessSelector =
-                     votelib.evaluate.condorcet.SmithSet(),
+                 set_selector: SeatlessSelector = SmithSet(),
                  ):
         self.set_selector = set_selector
 
@@ -694,20 +695,26 @@ def eliminate_one(votes: Dict[RankedVoteType, int]) -> List[Candidate]:
 
 
 class Benham:
-    '''Benham sequential Condorcet selector. [#gacondo]_
+    """Benham sequential Condorcet selector. [#gacondo]_
 
     Selects a Condorcet winner. If one does not exist, eliminates one candidate
     using transferable vote (instant-runoff) and re-runs.
-    '''
+    """
     CONDO = votelib.evaluate.condorcet.CondorcetWinner()
 
-    def evaluate(self, votes: Dict[RankedVoteType, int]) -> List[Candidate]:
+    def evaluate(self,
+                 votes: Dict[RankedVoteType, int],
+                 n_seats: int = 1) -> List[Candidate]:
+        assert n_seats == 1
         current_votes = votes
         condowin = self.get_condorcet_winner(current_votes)
         while condowin is None:
             remains = eliminate_one(current_votes)
-            current_votes = RANKED_SUBSETTER.convert(votes, remains)
-            condowin = self.get_condorcet_winner(current_votes)
+            if len(remains) == 1:
+                return remains
+            else:
+                current_votes = RANKED_SUBSETTER.convert(votes, remains)
+                condowin = self.get_condorcet_winner(current_votes)
         return [condowin]
 
     def get_condorcet_winner(self,
