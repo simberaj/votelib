@@ -17,6 +17,7 @@ import votelib.convert
 import votelib.persist
 import votelib.util
 import votelib.component.quota
+import votelib.component.rankscore
 import votelib.component.transfer
 import votelib.evaluate.core
 import votelib.evaluate.condorcet
@@ -722,3 +723,56 @@ class Benham:
                              ) -> Optional[Candidate]:
         condores = self.CONDO.evaluate(RANKED_TO_CONDORCET.convert(votes))
         return condores[0] if condores else None
+
+
+class Baldwin:
+    """Baldwin's sequential Borda elimination method."""
+
+    def __init__(self, converter: Optional[votelib.convert.RankedToPositionalVotes] = None):
+        if converter is None:
+            converter = votelib.convert.RankedToPositionalVotes(
+                rank_scorer=votelib.component.rankscore.Borda(base=0)
+            )
+        self.converter = converter
+
+    def evaluate(self,
+                 votes: Dict[RankedVoteType, int],
+                 n_seats: int = 1) -> List[Candidate]:
+        current_votes = votes
+        neg_scores = self._compute_negative_scores(current_votes)
+        while len(neg_scores) > n_seats:
+            loser = votelib.evaluate.core.get_n_best(neg_scores, n_seats=1)[0]
+            if isinstance(loser, votelib.evaluate.core.Tie):
+                remaining = [cand for cand in neg_scores if cand not in loser]
+                n_rem_after_elim = len(neg_scores) - len(loser)
+                if n_rem_after_elim < n_seats:
+                    n_ties = n_seats - n_rem_after_elim
+                    logging.info("tied Baldwin losers %s, producing %d ties",
+                                 loser, n_ties)
+                    remaining_scores = self._compute_negative_scores(
+                        RANKED_SUBSETTER.convert(neg_scores, remaining)
+                    )
+                    return (
+                        votelib.evaluate.core.get_n_best(
+                            remaining_scores,
+                            n_seats - n_ties
+                        ) + [loser] * n_ties
+                    )
+                else:
+                    logging.info("tied Baldwin losers %s, eliminating all",
+                                 loser)
+            else:
+                logging.info("Baldwin loser is %s at %d, eliminating",
+                             loser, -neg_scores[loser])
+                remaining = [cand for cand in neg_scores if cand != loser]
+            current_votes = RANKED_SUBSETTER.convert(current_votes, remaining)
+            neg_scores = self._compute_negative_scores(current_votes)
+        return votelib.evaluate.core.get_n_best(neg_scores, n_seats)
+
+    def _compute_negative_scores(self,
+                                 votes: Dict[RankedVoteType, int]
+                                 ) -> Dict[Candidate, int]:
+        return {
+            cand: -score
+            for cand, score in self.converter.convert(votes).items()
+        }
