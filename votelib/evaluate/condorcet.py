@@ -1,4 +1,4 @@
-'''Condorcet selection evaluators.
+"""Condorcet selection evaluators.
 
 These evaluators work by examining pairwise orderings between candidates
 (how many voters prefer one candidate to another), which is also the form of
@@ -16,7 +16,7 @@ theorems such as Arrow's or Gibbard's.
 These evaluators only take few parameters; therefore, a dictionary of their
 instances with different setups is provided in the ``EVALUATORS`` module
 variable.
-'''
+"""
 
 import itertools
 import collections
@@ -172,7 +172,7 @@ class SchwartzSet:
 
 @simple_serialization
 class Copeland:
-    '''Copeland (count of pairwise wins) Condorcet selection evaluator.
+    """Copeland (count of pairwise wins) Condorcet selection evaluator.
 
     Calculates the pairwise wins, constructs the Copeland score by taking
     ``number_of_pairwise_wins - number_of_pairwise_losses`` for each candidate,
@@ -182,7 +182,7 @@ class Copeland:
     score.
 
     :param second_order: Whether to use second-order Copeland tiebreaking.
-    '''
+    """
     def __init__(self, second_order: bool = True):
         self.second_order = second_order
 
@@ -190,14 +190,14 @@ class Copeland:
                  votes: Dict[Tuple[Candidate, Candidate], int],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates using the Copeland method.
+        """Select candidates using the Copeland method.
 
         :param votes: Condorcet votes (counts of candidate pairs as they appear
             in the voter rankings); use
             :class:`votelib.convert.RankedToCondorcetVotes`
             to produce them from ranked votes.
         :param n_seats: Number of candidates to select.
-        '''
+        """
         wins = pairwise_wins(votes)
         scores = self.scores(wins)
         best = votelib.evaluate.core.get_n_best(scores, n_seats)
@@ -241,24 +241,24 @@ class Copeland:
 
 @simple_serialization
 class Schulze:
-    '''Schulze (beatpath) Condorcet selection evaluator.
+    """Schulze (beatpath) Condorcet selection evaluator.
 
     Also called Schwartz Sequential dropping or path voting. Finds paths
     between pairs of candidates in which each candidate pairwise beats the next
     and then selects the candidates with strongest such paths.
-    '''
+    """
     def evaluate(self,
                  votes: Dict[Tuple[Candidate, Candidate], int],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates using the Schulze method.
+        """Select candidates using the Schulze method.
 
         :param votes: Condorcet votes (counts of candidate pairs as they appear
             in the voter rankings); use
             :class:`votelib.convert.RankedToCondorcetVotes`
             to produce them from ranked votes.
         :param n_seats: Number of candidates to select.
-        '''
+        """
         paths = self.widest_paths(votes)
         scores = collections.defaultdict(int)
         for winner, loser in pairwise_wins(paths):
@@ -293,7 +293,7 @@ class Schulze:
 
 @simple_serialization
 class KemenyYoung:
-    '''Kemeny-Young Condorcet selection evaluator.
+    """Kemeny-Young Condorcet selection evaluator.
 
     Kemeny-Young orders the candidates based on their pairwise comparison by
     constructing an objective function that measures the quality of any
@@ -307,19 +307,19 @@ class KemenyYoung:
     method is highly computationally expensive (``O(n!)`` in the number of
     candidates) and infeasible on common machines for more than a handful of
     candidates.
-    '''
+    """
     def evaluate(self,
                  votes: Dict[Tuple[Candidate, Candidate], int],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates by the Kemeny-Young Condorcet method.
+        """Select candidates by the Kemeny-Young Condorcet method.
 
         :param votes: Condorcet votes (counts of candidate pairs as they appear
             in the voter rankings); use
             :class:`votelib.convert.RankedToCondorcetVotes`
             to produce them from ranked votes.
         :param n_seats: Number of candidates to select.
-        '''
+        """
         all_candidates = frozenset(cand for pair in votes for cand in pair)
         best_variants = []
         best_score = 0
@@ -343,14 +343,14 @@ class KemenyYoung:
     def score(variant: Collection[Candidate],
               votes: Dict[Tuple[Candidate, Candidate], int],
               ) -> int:
-        '''Compute the Kemeny-Young ordering score (objective function value).
+        """Compute the Kemeny-Young ordering score (objective function value).
 
         :param variant: The ordering of candidates to evaluate.
         :param votes: Condorcet votes (counts of candidate pairs as they appear
             in the voter rankings); use
             :class:`votelib.convert.RankedToCondorcetVotes`
             to produce them from ranked votes.
-        '''
+        """
         return sum(
             votes.get((cand_upper, cand_lower), 0)
             for i, cand_upper in enumerate(variant)
@@ -360,7 +360,7 @@ class KemenyYoung:
 
 @simple_serialization
 class MinimaxCondorcet:
-    '''Minimax Condorcet selection evaluator.
+    """Minimax Condorcet selection evaluator.
 
     Also known as successive reversal or Simpson-Kramer method.
     Selects as the winner the candidate whose greatest pairwise defeat is
@@ -372,7 +372,7 @@ class MinimaxCondorcet:
     :param pairwin_scoring: A pairwise win scorer callable. Most common
         variants are found in the :mod:`votelib.component.pairwin_scorer`
         module and can be referred to by their names.
-    '''
+    """
     def __init__(self,
                  pairwin_scoring: Union[str, Callable] = 'winning_votes',
                  ):
@@ -384,14 +384,14 @@ class MinimaxCondorcet:
                  votes: Dict[Tuple[Candidate, Candidate], int],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates by the Minimax Condorcet method.
+        """Select candidates by the Minimax Condorcet method.
 
         :param votes: Condorcet votes (counts of candidate pairs as they appear
             in the voter rankings); use
             :class:`votelib.convert.RankedToCondorcetVotes`
             to produce them from ranked votes.
         :param n_seats: Number of candidates to select.
-        '''
+        """
         max_counterscore = {}
         for pair, score in self.pairwin_scoring(votes).items():
             max_counterscore[pair[1]] = max(
@@ -406,7 +406,7 @@ class MinimaxCondorcet:
 
 @simple_serialization
 class RankedPairs:
-    '''Tideman's ranked pairs Condorcet selection evaluator.
+    """Tideman's ranked pairs Condorcet selection evaluator.
 
     Ranks pairwise wins by their magnitude and sequentially locks pairs of
     who beats whom in descending order into a ranking, discarding pairs that
@@ -418,7 +418,7 @@ class RankedPairs:
     :param pairwin_scoring: A pairwise win scorer callable. Most common
         variants are found in the :mod:`votelib.component.pairwin_scorer`
         module and can be referred to by their names.
-    '''
+    """
     def __init__(self,
                  pairwin_scoring: Union[str, Callable] = 'winning_votes',
                  ):
@@ -430,14 +430,14 @@ class RankedPairs:
                  votes: Dict[Tuple[Candidate, Candidate], int],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates by the ranked pairs method.
+        """Select candidates by the ranked pairs method.
 
         :param votes: Condorcet votes (counts of candidate pairs as they appear
             in the voter rankings); use
             :class:`votelib.convert.RankedToCondorcetVotes`
             to produce them from ranked votes.
         :param n_seats: Number of candidates to select.
-        '''
+        """
         scored = self.pairwin_scoring(votes)
         pairwise_winners = list(votes.keys())
         pairwise_winners.sort(key=votes.get, reverse=True)

@@ -1,4 +1,4 @@
-'''Open party list selection evaluators.
+"""Open party list selection evaluators.
 
 Many party-list proportional systems feature open lists - that is, voters get
 to cast preferential votes for the candidates on that list, and the order of
@@ -18,7 +18,7 @@ votes for the list or at least a quota of the votes based on the number of
 seats) is provided.
 :class:`ListOrderTieBreaker` provides a wrapper for any
 selection evaluator and uses the list ordering to break ties.
-'''
+"""
 
 
 from typing import Any, List, Dict, Union, Callable
@@ -34,7 +34,7 @@ from votelib.persist import simple_serialization
 
 @simple_serialization
 class ThresholdOpenList:
-    '''A threshold-based open list evaluator.
+    """A threshold-based open list evaluator.
 
     Allows candidates that got at least a given number of votes for the list as
     preferential votes to jump over all other candidates. These jumping
@@ -67,7 +67,7 @@ class ThresholdOpenList:
         when more candidates are allowed to jump than the number of seats.
         If True, the candidates lowest on the list are eliminated; if False,
         the candidates with the least votes are eliminated.
-    '''
+    """
     def __init__(self,
                  jump_fraction: Fraction = None,
                  quota_function: Union[
@@ -98,13 +98,13 @@ class ThresholdOpenList:
                  n_seats: int,
                  candidate_list: List[Candidate],
                  ) -> List[Candidate]:
-        '''Select candidates from an open party list.
+        """Select candidates from an open party list.
 
         :param votes: Preferential votes (simple) for candidates on the list.
         :param n_seats: Number of seats to be awarded to the list - the number
             of candidates to elect.
         :param candidate_list: The original (party-determined) list ordering.
-        '''
+        """
         jump_thresholds = []
         total_votes = sum(votes.values())
         if self.jump_fraction is not None:
@@ -144,14 +144,14 @@ class ThresholdOpenList:
 
 @simple_serialization
 class ListOrderTieBreaker:
-    '''A wrapper for any selector for open-list candidate selection.
+    """A wrapper for any selector for open-list candidate selection.
 
     The candidates that the provided evaluator returns with the given votes are
     provided as the result of the open list. If there is a tie, it is
     broken by the ordering on the party list.
 
     :param evaluator: Any selection evaluator.
-    '''
+    """
     def __init__(self, evaluator: votelib.evaluate.core.Selector):
         self.evaluator = evaluator
 
@@ -160,14 +160,14 @@ class ListOrderTieBreaker:
                  n_seats: int,
                  candidate_list: List[Candidate],
                  ) -> List[Candidate]:
-        '''Select candidates from an open party list.
+        """Select candidates from an open party list.
 
         :param votes: Preferential votes for candidates on the list. Must be
             of the type that is accepted by the underlying evaluator.
         :param n_seats: Number of seats to be awarded to the list - the number
             of candidates to elect.
         :param candidate_list: The original (party-determined) list ordering.
-        '''
+        """
         inner_result = self.evaluator.evaluate(votes, n_seats)
         if votelib.evaluate.core.Tie.any(inner_result):
             return votelib.evaluate.core.Tie.break_by_list(

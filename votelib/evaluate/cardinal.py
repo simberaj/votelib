@@ -1,27 +1,31 @@
-'''Cardinal voting systems - systems that use score votes.
+"""Cardinal voting systems - systems that use score votes.
 
 These systems have the most complicated input - each voter can assign a range
 of scores to candidates - but are claimed to circumvent the Arrow's
 impossibility theorem and Gibbard-Satterthwaite theorem (but not the more
 general Gibbard's theorem) that only hold generally for ordinal (ranked) voting
 systems.
-'''
-
+"""
+import collections
+import logging
 import math
 from fractions import Fraction
-from typing import Any, List, Dict, Union, Callable
+from typing import Any, List, Dict, Union, Callable, Optional, Tuple
 from numbers import Number
 
 import votelib.convert
 import votelib.persist
+import votelib.util
+import votelib.component.quota
 import votelib.evaluate.core
 import votelib.evaluate.condorcet
 from votelib.candidate import Candidate
 from votelib.vote import ScoreVoteType
+from votelib.persist import simple_serialization
 
 
 class ScoreVoting:
-    '''Evaluate ordinary score voting (range voting) systems.
+    """Evaluate ordinary score voting (range voting) systems.
 
     With the aggregation function set to sum, it also evaluates cumulative
     voting systems.
@@ -30,7 +34,7 @@ class ScoreVoting:
     (to which all parameters are passed to) followed by a
     :class:`votelib.evaluate.core.Plurality` evaluator that selects the highest
     aggregate score.
-    '''
+    """
     def __init__(self,
                  function: Union[
                      Callable[[List[Number]], Number], str
@@ -60,11 +64,11 @@ class ScoreVoting:
                  votes: Dict[ScoreVoteType, int],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates by highest score.
+        """Select candidates by highest score.
 
         :param votes: Score votes.
         :param n_seats: Number of candidates to select.
-        '''
+        """
         return votelib.evaluate.core.get_n_best(
             self._agg.convert(votes),
             n_seats
@@ -72,7 +76,7 @@ class ScoreVoting:
 
 
 class MajorityJudgment:
-    '''Majority Judgment, a median-based cardinal voting system.
+    """Majority Judgment, a median-based cardinal voting system.
 
     Parameters other than tie_breaking are passed to
     :class:`votelib.convert.ScoreToSimpleVotes`.
@@ -104,7 +108,7 @@ class MajorityJudgment:
     :param bottom_value: Value to assign to candidates with less voter scores
         than min_count. This would usually be the lowest possible aggregate
         score.
-    '''
+    """
 
     def __init__(self,
                  tie_breaking: str = 'default',
@@ -139,11 +143,11 @@ class MajorityJudgment:
                  votes: Dict[Candidate, Dict[Number, int]],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates by Majority Judgment (appx. highest median score).
+        """Select candidates by Majority Judgment (appx. highest median score).
 
         :param votes: Score votes.
         :param n_seats: Number of candidates to select.
-        '''
+        """
         corrected_scores = self._agg.corrected_scores(votes)
         order = votelib.evaluate.core.get_n_best(
             self._agg.aggregate(corrected_scores),
@@ -161,12 +165,12 @@ class MajorityJudgment:
                           scores: Dict[Candidate, Dict[Any, int]],
                           n_seats: int,
                           ) -> List[Candidate]:
-        '''Perform Majority Judgment tiebreaking by removing median scores.
+        """Perform Majority Judgment tiebreaking by removing median scores.
 
         This removes median scores from tied candidates until the median of the
         remaining scores differs among them, and then selects the one with the
         highest new median score.
-        '''
+        """
         scores = {cand: cscores.copy() for cand, cscores in scores.items()}
         while max(sum(cscores.values()) for cscores in scores.values()):
             medians = self._agg.aggregate(scores)
@@ -218,11 +222,11 @@ class MajorityJudgment:
                        scores: Dict[Candidate, Dict[Number, int]],
                        n_seats: int,
                        ) -> List[Candidate]:
-        '''Perform Majority Judgment Plus tiebreaking.
+        """Perform Majority Judgment Plus tiebreaking.
 
         This takes the candidates with the highest amount of scores higher or
         equal to the median, as suggested by Bosworth.
-        '''
+        """
         # select the one with largest majority with the largest median grade
         # so we need to find out the median grade again
         majorities = self._counts_over_score(
@@ -249,7 +253,7 @@ class MajorityJudgment:
 
 
 class STAR:
-    '''Score Then Automatic Run-Off (STAR) cardinal voting system.
+    """Score Then Automatic Run-Off (STAR) cardinal voting system.
 
     A score-based voting system that aims to reduce suceptibility to tactical
     voting by forcing a run-off between the highest-ranked candidates.
@@ -292,7 +296,7 @@ class STAR:
     :param bottom_value: Value to assign to candidates with less voter scores
         than min_count. This would usually be the lowest possible aggregate
         score.
-    '''
+    """
     def __init__(self,
                  runoff_added_count: int = 1,
                  runoff_added_fraction: Number = 0,
@@ -340,11 +344,11 @@ class STAR:
                  votes: Dict[ScoreVoteType, int],
                  n_seats: int = 1,
                  ) -> List[Candidate]:
-        '''Select candidates by STAR voting.
+        """Select candidates by STAR voting.
 
         :param votes: Score votes.
         :param n_seats: Number of candidates to select.
-        '''
+        """
         # Aggregate scores to determine who goes to runoff.
         agg_scores = self._agg.convert(votes)
         runoff_size = (
@@ -364,3 +368,219 @@ class STAR:
             if all(cand in runoff_members for cand in pair)
         }
         return self.runoff_evaluator.evaluate(pairwin_votes, n_seats)
+
+
+@simple_serialization
+class AllocatedScoreDistributor:
+    """Allocated Score, also known as Proportional STAR, as a distributor.
+
+    Achieves proportional representation by allocating a seat to the candidate
+    with the highest total score sum, then removing a quota fraction of their
+    most important supporters from the consideration and repeating until all
+    seats are filled.
+
+    :param quota_function: A callable producing the quota threshold from the
+        total number of votes and number of seats. The common quota functions
+        can be referenced by string name from the
+        :mod:`votelib.component.quota` module.
+    """
+
+    def __init__(self,
+                 quota_function: Union[
+                     str, Callable[[int, int], Number], None
+                 ] = 'droop',
+                 ):
+        self.quota_function = votelib.component.quota.construct(
+            quota_function
+        )
+        self._subsetter = votelib.convert.SubsettedVotes(
+            vote_subsetter=votelib.vote.ScoreSubsetter()
+        )
+
+    def evaluate(self,
+                 votes: Dict[ScoreVoteType, int],
+                 n_seats: int = 1,
+                 prev_gains: Dict[Candidate, int] = {},
+                 max_seats: Dict[Candidate, int] = {},
+                 ) -> Dict[Candidate, int]:
+        """Select candidates by Allocated Score (Proportional STAR).
+
+        :param votes: Score votes.
+        :param n_seats: Number of seats to be filled.
+        :param prev_gains: Seats gained by the candidate/party in previous
+            election rounds to be subtracted from the proportional result
+            awarded here.
+        :param max_seats: Maximum number of seats that the given
+            candidate/party can obtain in total (including previous gains).
+        """
+        current_votes = votes.copy()
+        elected = collections.defaultdict(int)
+        rem_seats = n_seats
+        quota = self.quota_function(sum(votes.values()), n_seats)
+        while rem_seats > 0:
+            agg_scores = self._sum_scores(current_votes)
+            best = votelib.evaluate.core.get_n_best(agg_scores, 1)[0]
+            if isinstance(best, votelib.evaluate.core.Tie):
+                if rem_seats >= len(best):
+                    logging.info("%s are tied best, electing all", best)
+                    for cand in best:
+                        elected[cand] += 1
+                        current_votes = self._subtract_votes(
+                            current_votes,
+                            candidate=cand,
+                            gained=elected[cand] + prev_gains.get(cand, 0),
+                            max_seats=max_seats.get(cand),
+                            subtract_size=quota,
+                        )
+                    rem_seats -= len(best)
+                else:
+                    logging.info("%s are tied best for %d seats",
+                                 best, rem_seats)
+                    elected[best] += rem_seats
+                    rem_seats = 0
+                    # we will terminate anyway, so no subtraction needed
+            else:
+                logging.info("%s is the best candidate, electing", best)
+                elected[best] += 1
+                rem_seats -= 1
+                current_votes = self._subtract_votes(
+                    current_votes,
+                    candidate=best,
+                    gained=elected[best] + prev_gains.get(best, 0),
+                    max_seats=max_seats.get(best),
+                    subtract_size=quota,
+                )
+        return elected
+
+    @staticmethod
+    def _sum_scores(current_votes: Dict[
+                        ScoreVoteType,
+                        Union[int, Fraction]
+                    ],
+                    ) -> Dict[Candidate, Union[int, Fraction]]:
+        scores = collections.defaultdict(int)
+        for vote, n_votes in current_votes.items():
+            for candidate, score in vote:
+                scores[candidate] += score * n_votes
+        return dict(scores)
+
+    def _subtract_votes(self,
+                        current_votes: Dict[
+                            ScoreVoteType,
+                            Union[int, Fraction]
+                        ],
+                        candidate: Candidate,
+                        gained: int,
+                        max_seats: Optional[int],
+                        subtract_size: Union[int, Fraction],
+                        ) -> Dict[ScoreVoteType, Union[int, Fraction]]:
+        logging.info("subtracting %g best votes from %s",
+                     subtract_size, candidate)
+        current_votes = self._fraction_out_elected(
+            current_votes,
+            cand=candidate,
+            subtract_size=subtract_size,
+        )
+        if max_seats is not None and gained == max_seats:
+            logging.info("%s reached maximum %d seats, eliminating",
+                         candidate, gained)
+            retain_cands = [
+                cand
+                for cand in votelib.util.all_scored_candidates(current_votes)
+                if cand != candidate
+            ]
+            return self._subsetter.convert(
+                current_votes,
+                subset=retain_cands
+            )
+        else:
+            return current_votes
+
+    def _fraction_out_elected(self,
+                              current_votes: Dict[
+                                  ScoreVoteType,
+                                  Union[int, Fraction]
+                              ],
+                              cand: Candidate,
+                              subtract_size: Union[int, Fraction],
+                              ) -> Dict[ScoreVoteType, Union[int, Fraction]]:
+        while subtract_size > 0:
+            best_votes, best_score = self._find_best_votes(current_votes, cand)
+            current_size = sum(current_votes[vote] for vote in best_votes)
+            if not current_size:
+                # No more votes for candidate, return unchanged.
+                logging.debug("no more votes for %s, terminating subtraction",
+                              cand)
+                return current_votes
+            else:
+                current_votes = current_votes.copy()
+                if current_size > subtract_size:
+                    # There are more votes than we need to remove;
+                    # spread remove_size subtraction across them equally.
+                    fraction = Fraction(
+                        current_size - subtract_size,
+                        current_size
+                    )
+                    logging.debug("cutting %g votes scoring %s at %s to %s",
+                                  current_size, cand, best_score, fraction)
+                    for vote in best_votes:
+                        current_votes[vote] *= fraction
+                    return current_votes
+                else:
+                    logging.debug("removing %g votes scoring %s at %s",
+                                  current_size, cand, best_score)
+                    # Remove all best_votes and run one more round.
+                    for vote in best_votes:
+                        del current_votes[vote]
+                    subtract_size -= current_size
+        return current_votes
+
+    @staticmethod
+    def _find_best_votes(current_votes: Dict[
+                             ScoreVoteType,
+                             Union[int, Fraction]
+                         ],
+                         cand: Candidate,
+                         ) -> Tuple[List[ScoreVoteType], Any]:
+        best_votes = []
+        # Bootstrap with overall minimum score.
+        best_score = min(
+            min(score for cand, score in vote)
+            for vote in current_votes
+        )
+        for vote in current_votes:
+            for c, score in vote:
+                if c == cand:
+                    if score > best_score:
+                        best_votes = [vote]
+                        best_score = score
+                    elif score == best_score:
+                        best_votes.append(vote)
+                    break
+        return best_votes, best_score
+
+
+class AllocatedScoreSelector:
+    """Allocated Score, also known as Proportional STAR, as a selector.
+
+    Elects the candidate with the highest score, then removes a quota fraction
+    of their most important supporters from the consideration and repeats
+    until all seats are filled.
+
+    Uses :class:`AllocatedScoreDistributor` internally; see its definition
+    for parameter documentation.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self._distributor = AllocatedScoreDistributor(*args, **kwargs)
+
+    def evaluate(self,
+                 votes: Dict[ScoreVoteType, int],
+                 n_seats: int = 1,
+                 ) -> List[Candidate]:
+        cands = votelib.util.all_scored_candidates(votes)
+        return list(self._distributor.evaluate(
+            votes,
+            n_seats=n_seats,
+            max_seats={cand: 1 for cand in cands}
+        ))

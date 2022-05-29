@@ -1,3 +1,12 @@
+"""Read and write BLT format files.
+
+The BLT files are an old but pretty standard format for representing
+cast votes in a ranked election. [#meekm]_
+
+.. [#meekm] "Algorithm 123 — Single transferable vote by Meek’s method",
+    I. D. Hill, B. A. Wichmann and D. R. Woodall.
+    https://www.dia.govt.nz/diawebsite.NSF/Files/meekm/$file/meekm.pdf
+"""
 
 from decimal import Decimal
 from numbers import Number

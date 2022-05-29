@@ -1,4 +1,4 @@
-'''Candidate specifications and nomination validators.
+"""Candidate specifications and nomination validators.
 
 Contains definitions of candidate types and interfaces (:class:`Candidate`,
 :class:`ElectionParty`, :class:`Coalition`), constituencies
@@ -15,7 +15,7 @@ For a particular example of this, the
 based on a value of an arbitrary property of the candidate. You can use any
 object that has the specified property defined; the classes defined here can be
 assigned arbitrary additional properties, so they, too, can be used.
-'''
+"""
 
 from __future__ import annotations
 
@@ -26,14 +26,14 @@ from votelib.persist import simple_serialization
 
 
 class CandidateError(Exception):
-    '''A candidate is invalid in the given context.
+    """A candidate is invalid in the given context.
 
     E.g. parties in place of individual candidates, or candidates ineligible
     to stand for given seats.
 
     :param candidate: Candidate that was found to be invalid.
     :param expected: Definition of a candidate that was expected.
-    '''
+    """
     def __init__(self, candidate: Any, expected: Any = None):
         self.candidate = candidate
         self.expected = expected
@@ -44,7 +44,7 @@ class CandidateError(Exception):
 
 
 class CandidateObject(metaclass=abc.ABCMeta):
-    '''An abstract class for election candidates.
+    """An abstract class for election candidates.
 
     The subclass check is overridden so that any hashable object that is not
     a set or tuple is accepted. Subclasses will not inherit this override.
@@ -53,7 +53,7 @@ class CandidateObject(metaclass=abc.ABCMeta):
     candidate names in all concerned places. The subclasses of this class
     are thus only needed for systems considering candidate properties
     such as coalition size-dependent electoral thresholds.
-    '''
+    """
 
     withdrawn: bool = False
     '''Whether the candidate withdrew from the election (and is thus ineligible
@@ -64,7 +64,7 @@ Candidate = Union[str, CandidateObject]
 
 
 class IndividualElectionOption(CandidateObject):
-    '''An abstract class for individuals standing for an election.'''
+    """An abstract class for individuals standing for an election."""
 
     candidacy_for: Optional[ElectionParty] = NotImplemented
     '''The party for which this choice is candidating for the election.
@@ -86,7 +86,7 @@ class IndividualElectionOption(CandidateObject):
 
 @simple_serialization
 class Person(IndividualElectionOption):
-    '''A physical person standing for the election.
+    """A physical person standing for the election.
 
     :param name: Name of the person, in any customary text format.
     :param number: Candidacy number assigned to the person for the purpose
@@ -97,7 +97,7 @@ class Person(IndividualElectionOption):
         an independent candidate.
     :param withdrawn: Whether the candidate withdrew from the election
         (and is thus ineligible to get elected).
-    '''
+    """
     def __init__(self,
                  name: str,
                  number: Optional[int] = None,
@@ -122,7 +122,7 @@ class Person(IndividualElectionOption):
 
 
 class ElectionParty(CandidateObject):
-    '''A subject that is regarded as a political party for the election.'''
+    """A subject that is regarded as a political party for the election."""
 
     is_coalition = NotImplemented
     '''Whether the party is a coalition.
@@ -134,7 +134,7 @@ class ElectionParty(CandidateObject):
 
 @simple_serialization
 class PoliticalParty(ElectionParty):
-    '''A political party or movement that is eligible to stand in elections.
+    """A political party or movement that is eligible to stand in elections.
 
     :param name: Name of the party, in any customary text format.
     :param number: Candidacy number assigned to the party for the purpose
@@ -142,7 +142,7 @@ class PoliticalParty(ElectionParty):
     :param affiliation: Other (e.g. national or supranational) parties this
         party is affiliated with, if any.
     :param lead: A person that leads the party into the elections.
-    '''
+    """
     is_coalition = False
 
     def __init__(self,
@@ -170,7 +170,7 @@ class PoliticalParty(ElectionParty):
 
 @simple_serialization
 class Coalition(ElectionParty):
-    '''A coalition of two or more election-eligible parties.
+    """A coalition of two or more election-eligible parties.
 
     :param parties: Parties involved in the coalition.
     :param name: Name of the coalition, in any customary text format. If not
@@ -180,7 +180,7 @@ class Coalition(ElectionParty):
     :param affiliations: Other (e.g. national or supranational) parties this
         coalition is affiliated with, if any.
     :param lead: A person that leads the coalition into the elections.
-    '''
+    """
     is_coalition = True
 
     def __init__(self,
@@ -201,11 +201,11 @@ class Coalition(ElectionParty):
         self.withdrawn = withdrawn
 
     def get_n_coalition_members(self) -> int:
-        '''Return the number of member parties in the coalition.
+        """Return the number of member parties in the coalition.
 
         This is important in some elections which specify different thresholds
         for coalitions with a given number of members.
-        '''
+        """
         return len(self.parties)
 
     def __repr__(self) -> str:
@@ -219,7 +219,7 @@ class Coalition(ElectionParty):
 
 @simple_serialization
 class IndividualToPartyMapper:
-    '''Define mapping from individuals to parties.
+    """Define mapping from individuals to parties.
 
     A candidate object such as a :class:`Person` might define multiple party
     relationships or define that the candidate is standing for the election as
@@ -241,7 +241,7 @@ class IndividualToPartyMapper:
         -   `'keep'` keeps them separately,
         -   `'ignore'` omits them from the result,
         -   `'error'` raises an error.
-    '''
+    """
 
     AFFILIATION_METHODS: List[str] = [
         'candidacy_for', 'membership'
@@ -290,13 +290,13 @@ class IndividualToPartyMapper:
 
 @simple_serialization
 class BlankVoteOption(ElectionParty, IndividualElectionOption):
-    '''A base class for blank (non-partisan) vote choices.
+    """A base class for blank (non-partisan) vote choices.
 
     This includes votes that are not counted to any candidate. In some rare
     cases, these votes have a special effect (such as triggering a new election
     if there is a sufficient number of them), but most of the time they can be
     safely disregarded.
-    '''
+    """
     is_coalition = False
     candidacy_for = None
     membership = None
@@ -308,28 +308,28 @@ class BlankVoteOption(ElectionParty, IndividualElectionOption):
 
 
 class NoneOfTheAbove(BlankVoteOption):
-    '''None of the above (NOTA) vote option (often called white ballots).
+    """None of the above (NOTA) vote option (often called white ballots).
 
     In some contexts, a sufficient number of these votes can trigger a special
     effect such as a new election.
 
     :param name: Actual name of the NOTA option in the given context.
-    '''
+    """
 
 
 class ReopenNominations(BlankVoteOption):
-    '''Reopen Nominations vote option.
+    """Reopen Nominations vote option.
 
     In some elections, this option is present; if it prevails, it can trigger
     a new round of nominations and a new election.
 
     :param name: Actual name of the Reopen Nominations option in the given
         context.
-    '''
+    """
 
 
 class Constituency:
-    '''A constituency for elections with multiple sets of candidates.
+    """A constituency for elections with multiple sets of candidates.
 
     Constituencies are used where the electorate is separated into more than
     one group. The most common variant is spatial - electoral or voting
@@ -348,40 +348,40 @@ class Constituency:
     existing features in the future) so this is essentially just a type marker,
     but further development might necessitate creating some subclasses of this,
     and more specific interfaces.
-    '''
+    """
 
 
 class Nominator(metaclass=abc.ABCMeta):
-    '''An abstract class for nominators (candidacy validators).'''
+    """An abstract class for nominators (candidacy validators)."""
     @abc.abstractmethod
     def validate(self, candidate: Candidate) -> None:
-        '''Check if the candidate satisfies criteria given by the system.
+        """Check if the candidate satisfies criteria given by the system.
 
         :raises NotImplementedError:
-        '''
+        """
         raise NotImplementedError
 
 
 # Nominators (checkers)
 @simple_serialization
 class BasicNominator(Nominator):
-    '''Validate that the election candidates are valid objects.
+    """Validate that the election candidates are valid objects.
 
     Does not do any logical checks; only validates that the candidate instance
     passes the criteria of the :class:`Candidate` class (such as checking
     against most types of collections).
 
     :param allow_blank: Whether to allow blank votes (NOTA, ReopenNominations).
-    '''
+    """
     def __init__(self, allow_blank: bool = True):
         self.allow_blank = allow_blank
 
     def validate(self, candidate: Candidate) -> None:
-        '''Check whether a candidate is valid.
+        """Check whether a candidate is valid.
 
         :param candidate: Candidate to be checked.
         :raises CandidateError: If a candidate is invalid.
-        '''
+        """
         if not isinstance(candidate, (str, CandidateObject)):
             raise CandidateError(f'invalid candidate {candidate}')
         if not self.allow_blank and isinstance(candidate, BlankVoteOption):
@@ -390,12 +390,12 @@ class BasicNominator(Nominator):
 
 @simple_serialization
 class PersonNominator(Nominator):
-    '''Validate that election candidates are physical persons and not parties.
+    """Validate that election candidates are physical persons and not parties.
 
     :param allow_independents: Whether persons candidating without a support
         of a political party can stand in the election.
     :param allow_blank: Whether to allow blank votes (NOTA, ReopenNominations).
-    '''
+    """
     def __init__(self,
                  allow_independents: bool = True,
                  allow_blank: bool = True,
@@ -404,11 +404,11 @@ class PersonNominator(Nominator):
         self.allow_blank = allow_blank
 
     def validate(self, candidate: Candidate) -> None:
-        '''Check whether a candidate is valid.
+        """Check whether a candidate is valid.
 
         :param candidate: Candidate to be checked.
         :raises CandidateError: If a candidate is invalid.
-        '''
+        """
         if not isinstance(candidate, IndividualElectionOption):
             raise CandidateError(candidate, IndividualElectionOption)
         if isinstance(candidate, BlankVoteOption):
@@ -422,7 +422,7 @@ class PersonNominator(Nominator):
 
 @simple_serialization
 class PartyNominator(Nominator):
-    '''Check that election candidates are electoral parties, not persons.
+    """Check that election candidates are electoral parties, not persons.
 
     This includes political parties in the broadest sense of the term, as well
     as their coalitions formed for the purpose of the election.
@@ -433,7 +433,7 @@ class PartyNominator(Nominator):
 
     :param allow_coalitions: Whether to allow coalitions.
     :param allow_blank: Whether to allow blank votes (NOTA, ReopenNominations).
-    '''
+    """
     def __init__(self,
                  allow_coalitions: bool = True,
                  allow_blank: bool = True
@@ -442,12 +442,12 @@ class PartyNominator(Nominator):
         self.allow_blank = allow_blank
 
     def validate(self, candidate: Candidate) -> None:
-        '''Check whether a candidate is a valid election party.
+        """Check whether a candidate is a valid election party.
 
         :param candidate: Candidate to be checked.
         :raises CandidateError: If a candidate is not a valid election party
             candidate.
-        '''
+        """
         if isinstance(candidate, BlankVoteOption):
             if not self.allow_blank:
                 raise CandidateError(candidate, 'non-blank vote')
