@@ -526,10 +526,11 @@ class InvertedApprovalVotes:
 
     In some voting systems, voters vote against rather than for candidates.
     This inverter assumes each voter approves of the candidates they did not
-    select.
+    select. It also ignores any candidates not voted against by anybody since
+    those do not appear in the votes.
     """
-    def convert(self,
-                votes: Dict[FrozenSet[Candidate], Number]
+    @staticmethod
+    def convert(votes: Dict[FrozenSet[Candidate], Number]
                 ) -> Dict[FrozenSet[Candidate], Number]:
         """Invert the count signs of single votes."""
         all_cands = frozenset(cand for vote in votes for cand in vote)
