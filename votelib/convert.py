@@ -513,11 +513,30 @@ class InvertedSimpleVotes:
 
     In some voting systems, voters vote against rather than for candidates.
     """
-    def convert(self,
-                votes: Dict[Candidate, Number]
+    @staticmethod
+    def convert(votes: Dict[Candidate, Number]
                 ) -> Dict[Candidate, Number]:
         """Invert the count signs of single votes."""
         return {cand: -n_votes for cand, n_votes in votes.items()}
+
+
+@simple_serialization
+class InvertedApprovalVotes:
+    """Vote inverter to represent negative simple votes.
+
+    In some voting systems, voters vote against rather than for candidates.
+    This inverter assumes each voter approves of the candidates they did not
+    select.
+    """
+    def convert(self,
+                votes: Dict[FrozenSet[Candidate], Number]
+                ) -> Dict[FrozenSet[Candidate], Number]:
+        """Invert the count signs of single votes."""
+        all_cands = frozenset(cand for vote in votes for cand in vote)
+        return {
+            frozenset(cand for cand in all_cands if cand not in vote): n_votes
+            for vote, n_votes in votes.items()
+        }
 
 
 # Individual/party converters

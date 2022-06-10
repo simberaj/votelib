@@ -106,6 +106,22 @@ def test_rounding():
         'D': Decimal('.0001')
     }
 
+
 def test_rounding_negfail():
     with pytest.raises(ValueError):
         rdr = votelib.convert.RoundedVotes(decimals=-1)
+
+
+def test_inverted_approval():
+    original = {
+        frozenset('AB'): 2,
+        frozenset('CD'): 3,
+        frozenset('AE'): 1,
+    }
+    expected = {
+        frozenset('CDE'): 2,
+        frozenset('ABE'): 3,
+        frozenset('BCD'): 1,
+    }
+    inverted = votelib.convert.InvertedApprovalVotes().convert(original)
+    assert inverted == expected
