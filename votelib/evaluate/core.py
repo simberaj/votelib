@@ -793,7 +793,8 @@ class Conditioned:
     Before passing the votes to the main evaluator, an eliminator is evaluated
     first, and only the candidates returned by it are allowed to proceed to the
     main evaluation. This is useful for implementing vote thresholds in
-    proportional systems.
+    proportional systems or for two-stage Condorcet-like systems, such as
+    Smith//Score.
 
     :param evaluator: The main evaluator to produce the results.
     :param eliminator: A selector to determine which variants proceed to the
@@ -806,7 +807,7 @@ class Conditioned:
     def __init__(self,
                  eliminator: SeatlessSelector,
                  evaluator: Evaluator,
-                 subsetter: Optional[votelib.vote.SimpleSubsetter] = None,
+                 subsetter: Optional[votelib.vote.VoteSubsetter] = None,
                  depth: int = 1,
                  ):
         self.eliminator = eliminator
