@@ -8,7 +8,7 @@ most of the variations there are in that system.
 import abc
 from fractions import Fraction
 from typing import List, Any
-from numbers import Number
+from numbers import Real
 
 from votelib.persist import simple_serialization
 
@@ -36,7 +36,7 @@ class RankScorer(metaclass=abc.ABCMeta):
     `scores()` method is called first.
     """
     @abc.abstractmethod
-    def scores(self, n_ranked: int) -> List[Number]:
+    def scores(self, n_ranked: int) -> List[Real]:
         raise NotImplementedError
 
 
@@ -206,10 +206,10 @@ class SequenceBased(RankScorer):
     :param sequence: The scores for the top candidates on the ballot.
     """
 
-    def __init__(self, sequence: List[Number]):
+    def __init__(self, sequence: List[Real]):
         self.sequence = sequence
 
-    def scores(self, n_ranked: int) -> List[Number]:
+    def scores(self, n_ranked: int) -> List[Real]:
         """Return the scores for the first n_ranked ranks.
 
         This gives values from the initial sequence, then zeros.

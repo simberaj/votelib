@@ -13,8 +13,8 @@ import decimal
 from fractions import Fraction
 from decimal import Decimal
 from typing import Any, List, Tuple, Dict, FrozenSet, Union, Callable, \
-                   Iterable, Collection
-from numbers import Number
+    Iterable, Collection, TypeVar
+from numbers import Number, Real
 
 import votelib.candidate
 import votelib.util
@@ -25,6 +25,8 @@ from votelib.candidate import \
 from votelib.vote import RankedVoteType, ScoreVoteType, VoteSubsetter
 from votelib.component import rankscore
 from votelib.persist import simple_serialization
+
+N = TypeVar("N", bound=Real)
 
 
 def _subtract_lowest(scores: Dict[Any, int],
@@ -69,7 +71,7 @@ class ApprovalToSimpleVotes:
 
     def convert(self,
                 votes: Dict[FrozenSet[Candidate], int]
-                ) -> Dict[Candidate, Number]:
+                ) -> Dict[Candidate, Union[int, Fraction]]:
         """Convert approval votes to simple votes."""
         agg_votes = collections.defaultdict(int)
         for bulk, n_votes in votes.items():
@@ -133,7 +135,7 @@ class ScoreToSimpleVotes:
                      Callable[[List[Any]], Any], Any, None
                  ] = None,
                  min_count: int = 0,
-                 truncation: Number = 0,
+                 truncation: Real = 0,
                  bottom_value: Any = 0,
                  ):
         self.function = self._get_function(function)
@@ -159,7 +161,7 @@ class ScoreToSimpleVotes:
 
     def convert(self,
                 votes: Dict[ScoreVoteType, int],
-                ) -> Dict[Candidate, Any]:
+                ) -> Dict[Candidate, Real]:
         """Convert score votes to simple votes.
 
         :param votes: Uncorrected score votes.
@@ -299,8 +301,8 @@ class RankedToPresenceCounts:
     that appear on second and lower ranks only, etc.
     """
     def convert(self,
-                votes: Dict[RankedVoteType, Number],
-                ) -> Dict[Candidate, Number]:
+                votes: Dict[RankedVoteType, N],
+                ) -> Dict[Candidate, N]:
         """Convert ranked votes to simple votes, disregarding rank."""
         output = collections.defaultdict(int)
         for cand, rank_i, n_votes in votelib.util.all_rankings(votes):
@@ -316,8 +318,8 @@ class RankedToApprovalVotes:
     a particular ballot regardless of rank.
     """
     def convert(self,
-                votes: Dict[RankedVoteType, Number],
-                ) -> Dict[FrozenSet[Candidate], Number]:
+                votes: Dict[RankedVoteType, N],
+                ) -> Dict[FrozenSet[Candidate], N]:
         approval = {}
         for ranking, n_votes in votes.items():
             vote_cands = set()

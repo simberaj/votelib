@@ -4,7 +4,7 @@ These are used in some Condorcet methods to determine ranking priority.
 """
 
 from typing import Callable, Dict, Tuple
-from numbers import Number
+from numbers import Real
 
 import votelib.component.core
 from votelib.vote import Candidate
@@ -16,15 +16,15 @@ PAIRWIN_SCORERS = {}
 pairwin_scorer_mark, get, construct = \
     votelib.component.core.register_functions(
         PAIRWIN_SCORERS, 'pairwise win scorer', Callable[
-            [Dict[Tuple[Candidate, Candidate], Number]],
-            Dict[Tuple[Candidate, Candidate], Number]
+            [Dict[Tuple[Candidate, Candidate], Real]],
+            Dict[Tuple[Candidate, Candidate], Real]
         ]
     )
 
 
 @pairwin_scorer_mark
-def winning_votes(counts: Dict[Tuple[Candidate, Candidate], Number]
-                  ) -> Dict[Tuple[Candidate, Candidate], Number]:
+def winning_votes(counts: Dict[Tuple[Candidate, Candidate], Real]
+                  ) -> Dict[Tuple[Candidate, Candidate], Real]:
     """Winning votes pairwise win scorer. Counts wins fully, zero otherwise.
 
     This is the most common pairwise win scorer. When the number of votes
@@ -34,14 +34,14 @@ def winning_votes(counts: Dict[Tuple[Candidate, Candidate], Number]
     :param counts: Condorcet votes (counts of pairwise preferences).
     """
     return {
-        pair: (count if count > counts.get(tuple(reversed(pair)), 0) else 0)
+        pair: (count if count > counts.get((pair[1], pair[0]), 0) else 0)
         for pair, count in counts.items()
     }
 
 
 @pairwin_scorer_mark
-def margins(counts: Dict[Tuple[Candidate, Candidate], Number]
-            ) -> Dict[Tuple[Candidate, Candidate], Number]:
+def margins(counts: Dict[Tuple[Candidate, Candidate], Real]
+            ) -> Dict[Tuple[Candidate, Candidate], Real]:
     """Margins pairwise win scorer. Takes the difference from reverse option.
 
     Also called margin of victory or defeat strength. Assigns the number of
@@ -52,14 +52,14 @@ def margins(counts: Dict[Tuple[Candidate, Candidate], Number]
     :param counts: Condorcet votes (counts of pairwise preferences).
     """
     return {
-        pair: count - counts.get(tuple(reversed(pair)), 0)
+        pair: count - counts.get((pair[1], pair[0]), 0)
         for pair, count in counts.items()
     }
 
 
 @pairwin_scorer_mark
-def pairwise_opposition(counts: Dict[Tuple[Candidate, Candidate], Number]
-                        ) -> Dict[Tuple[Candidate, Candidate], Number]:
+def pairwise_opposition(counts: Dict[Tuple[Candidate, Candidate], Real]
+                        ) -> Dict[Tuple[Candidate, Candidate], Real]:
     """Pairwise opposition win scorer. Returns the win counts unchanged.
 
     This gives the number of votes ranking the pair in the given order

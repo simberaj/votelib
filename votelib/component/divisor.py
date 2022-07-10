@@ -21,8 +21,8 @@ keyed by their name. `get()` retrieves from this dictionary by string key;
 
 from fractions import Fraction
 from decimal import Decimal
-from typing import Callable
-from numbers import Number
+from typing import Callable, TypeVar, Union
+from numbers import Number, Real
 
 import votelib.component.core
 
@@ -106,9 +106,12 @@ def macau(order: int) -> int:
     return 2 ** order
 
 
-def modified_first_coef(divisor_fx: Callable[[int], Number],
+R = TypeVar("R", bound=Real)
+
+
+def modified_first_coef(divisor_fx: Callable[[int], R],
                         first_coef: Decimal = Decimal('1.4'),
-                        ) -> Callable[[int], Number]:
+                        ) -> Callable[[int], Union[int, Fraction, R]]:
     """Modify the divisor for the zeroth order to an apriori coefficient.
 
     This can be used to raise the threshold for parties that have not yet
@@ -122,7 +125,7 @@ def modified_first_coef(divisor_fx: Callable[[int], Number],
     if not isinstance(first_coef, (int, Fraction)):
         first_coef = Fraction(*first_coef.as_integer_ratio())
 
-    def _modified_divisor(order: int) -> Number:
+    def _modified_divisor(order: int) -> Union[int, Fraction, R]:
         return divisor_fx(order) if order > 0 else first_coef
 
     return _modified_divisor

@@ -19,8 +19,8 @@ import itertools
 import bisect
 import functools
 from fractions import Fraction
-from typing import Any, List, Dict, FrozenSet, Optional, Collection, Union
-from numbers import Number
+from typing import List, Dict, FrozenSet, Optional, Collection, Union, TypeVar
+from numbers import Number, Real, Rational
 
 from votelib.candidate import Candidate
 from votelib.vote import RankedVoteType
@@ -66,10 +66,13 @@ def ranked_next(vote: RankedVoteType,
     return frozenset()    # exhausted ballot
 
 
-def distribute_n_random(cand_weights: Dict[Any, Number],
+T = TypeVar("T")
+
+
+def distribute_n_random(cand_weights: Dict[T, Real],
                         n: int,
                         limit_by_weight: bool = False,
-                        ) -> Dict[Any, int]:
+                        ) -> Dict[T, int]:
     """Distribute n randomly among candidates with weighted probabilities.
 
     :param cand_weights: Candidates and their weights.
@@ -246,7 +249,7 @@ class Hare(SimpleVoteTransferer):
         self.stable = (self.seed is not None)
 
     def _subtract(self,
-                  cand_alloc: Dict[RankedVoteType, Number],
+                  cand_alloc: Dict[RankedVoteType, Real],
                   n_sub: int,
                   ) -> None:
         random.seed(self.seed)
@@ -302,7 +305,7 @@ class Gregory(SimpleVoteTransferer):
     implemented yet.
     """
     def _subtract(self,
-                  cand_alloc: Dict[RankedVoteType, Fraction],
+                  cand_alloc: Dict[RankedVoteType, Rational],
                   n_sub: Fraction,
                   ) -> None:
         current_sum = sum(cand_alloc.values())
