@@ -121,6 +121,10 @@ ApprovalVoteType = FrozenSet[Candidate]
 RankedVoteType = Tuple[Union[Candidate, FrozenSet[Candidate]], ...]
 ScoreVoteType = FrozenSet[Tuple[Candidate, Any]]
 
+AnyVoteType = Union[
+    SimpleVoteType, ApprovalVoteType, RankedVoteType, ScoreVoteType
+]
+
 IntBoundsTupleType = Tuple[Optional[int], Optional[int]]
 NumBoundsTupleType = Tuple[Optional[Number], Optional[Number]]
 

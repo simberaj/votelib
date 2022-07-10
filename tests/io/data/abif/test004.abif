@@ -1,0 +1,7 @@
+# Case 4 - bracketed inlined tokens and unordered scores
+
+27: [Doña García Márquez]/5, [Steven B. Jensen]/2, [Sue Ye (蘇業)]/1, [Adam Muñoz]/0
+26: [Doña García Márquez]/3, [Steven B. Jensen]/5, [Sue Ye (蘇業)]/3, [Adam Muñoz]/1
+24: [Doña García Márquez]/2, [Steven B. Jensen]/1, [Sue Ye (蘇業)]/5, [Adam Muñoz]/2
+23: [Doña García Márquez]/1, [Steven B. Jensen]/0, [Sue Ye (蘇業)]/3, [Adam Muñoz]/5
+

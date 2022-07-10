@@ -1,0 +1,14 @@
+# Case 11 - Bracketed candidate tokens (declared).  Ranked and scored.
+#
+# 2021-06-18 - Replacement for case #6, using the new syntax described in
+# 	       ABIF issue #8 (<https://github.com/electorama/abif/issues/8>)
+
+=DGM:[Doña García Márquez]
+=SBJ:[Steven B. Jensen]
+=SY:[Sue Ye (蘇業)]
+=AM:[Adam Muñoz]
+
+27: DGM/5 > SBJ/2 >  SY/1 > AM/0
+26: SBJ/5 > DGM/3 =  SY/3 > AM/1
+24:  SY/5 > DGM/2 =  AM/2 > SBJ/1
+23:  AM/5 >  SY/3 > DGM/1 > SBJ/0

@@ -1,0 +1,16 @@
+# Case 14 - Asterisk-delimited multiplier
+#
+# 2021-06-18 - Replacement for case #9, using the new syntax described in
+# 	       ABIF issue #8 (<https://github.com/electorama/abif/issues/8>)
+# 2021-06-06 - Asterisk suggested by Jan Šimbera:
+#   <http://lists.electorama.com/pipermail/election-methods-electorama.com/2021-June/002793.html>
+
+=DGM:[Doña García Márquez]
+=SBJ:[Steven B. Jensen]
+=SY:[Sue Ye (蘇業)]
+=AM:[Adam Muñoz]
+
+27 * DGM/5, SBJ/2, SY/1, AM/0
+26 * DGM/3, SBJ/5, SY/3, AM/1
+24 * DGM/2, SBJ/1, SY/5, AM/2
+23 * DGM/1, SBJ/0, SY/3, AM/5
