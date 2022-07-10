@@ -1,9 +1,6 @@
 
 import sys
 import os
-import decimal
-from fractions import Fraction
-from decimal import Decimal
 
 import pytest
 
@@ -11,6 +8,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 import votelib.evaluate.sequential
 import votelib.evaluate.core
 import votelib.evaluate.condorcet
+from votelib.evaluate.core import Tie
 
 DEFAULT_STV = votelib.evaluate.sequential.TransferableVoteSelector(
     quota_function='droop'
@@ -281,3 +279,42 @@ def test_ga(ev, votes, expected):
     else:
         result = ev.evaluate(votes)
     assert result == [expected]
+
+
+BALDWIN_VOTES = {
+    tuple('ACB'): 5,
+    tuple('BAC'): 4,
+    tuple('CBA'): 2,
+}
+
+
+def test_baldwin_normal():
+    # https://www.mail-archive.com/election-methods@lists.electorama.com/msg00625.html
+    assert votelib.evaluate.sequential.Baldwin().evaluate(BALDWIN_VOTES) == ['B']
+
+
+def test_baldwin_reversed():
+    # dtto
+    reversed_votes = {
+        tuple(reversed(vote)): n_votes
+        for vote, n_votes in BALDWIN_VOTES.items()
+    }
+    assert votelib.evaluate.sequential.Baldwin().evaluate(reversed_votes) == ['B']
+
+
+TIED_BALDWIN_VOTES = {
+    tuple('ACB'): 5,
+    tuple('BAC'): 4,
+    tuple('CBA'): 2,
+    tuple('CB'): 1,
+}
+
+
+def test_baldwin_custom_tie_singlewinner():
+    # constructed by author
+    assert votelib.evaluate.sequential.Baldwin().evaluate(TIED_BALDWIN_VOTES) == ['A']
+
+
+def test_baldwin_custom_tie_multiwinner():
+    # constructed by author
+    assert votelib.evaluate.sequential.Baldwin().evaluate(TIED_BALDWIN_VOTES, n_seats=2) == ['A', Tie(['B', 'C'])]
