@@ -12,7 +12,8 @@ from fractions import Fraction
 from typing import Any, List, Tuple, Dict, Iterable, TypeVar
 from numbers import Number, Real, Rational
 
-from votelib.vote import RankedVoteType, ScoreVoteType
+import votelib.vote
+from votelib.vote import RankedVoteType, ScoreVoteType, AnyVoteType
 from votelib.candidate import Candidate
 
 
@@ -69,6 +70,28 @@ def all_scored_candidates(votes: Dict[ScoreVoteType, Any]
     return list(frozenset(
         cand for vote in votes.keys() for cand, score in vote
     ))
+
+
+def all_voted_for_candidates(votes: Dict[AnyVoteType, Any]
+                             ) -> List[Candidate]:
+    """Return a list of all candidates appearing in any of the votes.
+
+    Does not guarantee the preservation of input ordering. Works with all
+    recognized types of votes (simple, approval, ranked, score).
+
+    :returns: All unique candidates from the input votes.
+    """
+    vote_type = votelib.vote.detect_vote_type(next(iter(votes)))
+    if vote_type == Candidate:
+        return list(frozenset(votes.keys()))
+    elif vote_type == frozenset:
+        return list(frozenset(cand for vote in votes for cand in vote))
+    elif vote_type == RankedVoteType:
+        return all_ranked_candidates(votes)
+    elif vote_type == ScoreVoteType:
+        return all_scored_candidates(votes)
+    else:
+        raise ValueError(f'unknown vote type: {vote_type}')
 
 
 def all_rankings(votes: Dict[RankedVoteType, Any]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import abc
 import collections
 import inspect
+import logging
 from fractions import Fraction
 from typing import Any, List, Dict, Union, Optional, Callable
 from numbers import Number
@@ -99,6 +100,9 @@ class Tie(frozenset):
             else:
                 broken.append(item)
         return broken
+
+    def __str__(self) -> str:
+        return 'Tie between ' + ', '.join(str(cand) for cand in self)
 
 
 def get_n_best(votes: Dict[Candidate, Number],
@@ -1379,6 +1383,7 @@ class Plurality:
         :returns: A list of elected candidates, sorted in descending order by
             the input votes.
         """
+        logging.info('vote counts: %s', votes)
         return get_n_best(votes, n_seats)
 
 

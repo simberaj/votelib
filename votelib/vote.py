@@ -664,3 +664,16 @@ class ScoreSubsetter(VoteSubsetter):
             if cand in subset:
                 sub_score.add((cand, score))
         return frozenset(sub_score)
+
+
+def detect_vote_type(vote: AnyVoteType) -> type:
+    """Return a type annotation object corresponding to the vote type."""
+    if isinstance(vote, frozenset):
+        if all(isinstance(item, tuple) for item in vote):
+            return ScoreVoteType
+        else:
+            return ApprovalVoteType
+    elif isinstance(vote, tuple):
+        return RankedVoteType
+    else:
+        return SimpleVoteType

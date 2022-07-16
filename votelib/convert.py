@@ -265,11 +265,13 @@ class RankedToFirstPreference:
                 votes: Dict[RankedVoteType, int],
                 ) -> Dict[Candidate, int]:
         """Convert ranked votes to simple votes by taking first choices."""
-        output = collections.defaultdict(int)
+        output = {
+            cand: 0 for cand in votelib.util.all_ranked_candidates(votes)
+        }
         for ranking, n_votes in votes.items():
             if ranking:
                 output[ranking[0]] += n_votes
-        return dict(output)
+        return output
 
 
 @simple_serialization

@@ -20,6 +20,7 @@ variable.
 
 import itertools
 import collections
+import logging
 from typing import List, Tuple, Dict, Union, Callable, Collection
 from numbers import Number
 
@@ -200,6 +201,7 @@ class Copeland:
         """
         wins = pairwise_wins(votes)
         scores = self.scores(wins)
+        logging.info('Copeland scores: %s', scores)
         best = votelib.evaluate.core.get_n_best(scores, n_seats)
         if self.second_order and votelib.evaluate.core.Tie.any(best):
             return self.break_second_order(best, scores, wins)
@@ -223,6 +225,7 @@ class Copeland:
                            scores: Dict[Candidate, int],
                            wins: List[Tuple[Candidate, Candidate]],
                            ) -> List[Candidate]:
+        logging.info('breaking ties by second-order ranking: %s', best)
         untied = []
         tied = set()
         for selected in best:
@@ -230,10 +233,11 @@ class Copeland:
                 tied.update(selected)
             else:
                 untied.append(selected)
-        second_order_scores = collections.defaultdict(int)
+        second_order_scores = {cand: 0 for cand in tied}
         for winner, loser in wins:
             if winner in tied:
                 second_order_scores[winner] += scores[loser]
+        logging.info('Copeland second order scores: %s', second_order_scores)
         return untied + votelib.evaluate.core.get_n_best(
             second_order_scores, len(best) - len(untied)
         )
@@ -264,6 +268,8 @@ class Schulze:
         for winner, loser in pairwise_wins(paths):
             scores[winner] += 1
             scores[loser]    # to make zero appear if not present
+        logging.info('Schulze path-based pairwise win scores: %s',
+                     dict(scores))
         return votelib.evaluate.core.get_n_best(scores, n_seats)
 
     @staticmethod
@@ -273,7 +279,7 @@ class Schulze:
         all_candidates = set()
         for pair, count in counts.items():
             all_candidates.update(pair)
-            if counts.get(tuple(reversed(pair)), 0) < count:
+            if counts.get((pair[1], pair[0]), 0) < count:
                 paths[pair] = count
         all_candidates = list(all_candidates)
         for cand1 in all_candidates:
@@ -398,6 +404,7 @@ class MinimaxCondorcet:
                 max_counterscore.get(pair[1], -float('inf')),
                 score
             )
+        logging.info('maximum pairwise defeats: %s', max_counterscore)
         return votelib.evaluate.core.get_n_best(
             {cand: -score for cand, score in max_counterscore.items()},
             n_seats
@@ -449,10 +456,11 @@ class RankedPairs:
     @classmethod
     def _lock_pairs(cls,
                     pairs: List[Tuple[Candidate, Candidate]]
-                    ) -> List[Candidate]:
+                    ) -> List[Tuple[Candidate, Candidate]]:
         locked_pairs = []
         for pair in pairs:
             if not cls._is_path(locked_pairs, pair[1], pair[0]):
+                logging.info('locking %s over %s', *pair)
                 locked_pairs.append(pair)
         return locked_pairs
 
@@ -461,7 +469,7 @@ class RankedPairs:
                  source: Candidate,
                  sink: Candidate,
                  ) -> bool:
-        visited = set([source])
+        visited = {source}
         while True:
             last_len = len(visited)
             for from_cand, to_cand in pairs:

@@ -23,11 +23,13 @@ import votelib.evaluate.auxiliary
 import votelib.evaluate.sequential
 import votelib.io.blt
 import votelib.io.core
+import votelib.system
 import votelib.util
 import votelib.component.transfer as transfer
 from votelib.candidate import Candidate
 from votelib.evaluate.sequential import \
     TransferableVoteSelector, TransferableVoteDistributor
+from votelib.io.core import VotingSetup
 
 
 SUPPORTED_QUOTAS: List[str] = ['droop', 'hare']
@@ -43,7 +45,7 @@ class STVParseError(votelib.io.core.ParseError):
 
 def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
                system: Union[
-                   votelib.VotingSystem,
+                   votelib.system.VotingSystem,
                    votelib.evaluate.Evaluator,
                    None
                ] = None,
@@ -86,11 +88,11 @@ dump, dumps = votelib.io.core.dumpers(dump_lines)
 
 
 def _dump_system(system: Union[
-                     votelib.VotingSystem,
+                     votelib.system.VotingSystem,
                      votelib.evaluate.Evaluator
                  ],
                  **kwargs) -> Iterable[str]:
-    if isinstance(system, votelib.VotingSystem):
+    if isinstance(system, votelib.system.VotingSystem):
         yield f'title={system.name}'
         yield from _dump_system(system.evaluator, **kwargs)
     elif isinstance(system, votelib.evaluate.FixedSeatCount):
@@ -220,11 +222,7 @@ def _ordinal_candidate_nicks(cand_names: Collection[Candidate]
     return nicks
 
 
-def load_lines(lines: Iterable[str]) -> Tuple[
-                   Dict[Tuple[Candidate, ...], Number],
-                   Optional[votelib.VotingSystem],
-                   List[Candidate],
-               ]:
+def load_lines(lines: Iterable[str]) -> VotingSetup:
     system, candidates, nicks, n_ballots, is_ordered = _load_system(lines)
     if n_ballots is None:
         # BLT mode invoked, the rest of the file is in BLT format.
@@ -244,11 +242,15 @@ def load_lines(lines: Iterable[str]) -> Tuple[
     else:
         loader = _load_ordered_votes if is_ordered else _load_unordered_votes
         votes = loader(_iter_vote_lines(lines, n_ballots), nicks)
-    return votes, system, candidates
+    return VotingSetup(
+        votes=votes,
+        system=system,
+        candidates=candidates
+    )
 
 
 def _load_system(lines: Iterable[str]) -> Tuple[
-                     Optional[votelib.VotingSystem],
+                     Optional[votelib.system.VotingSystem],
                      List[Candidate],
                      Dict[str, Candidate],
                      Optional[int],
@@ -288,14 +290,14 @@ def _load_system(lines: Iterable[str]) -> Tuple[
     raise STVParseError('end of file before ballot data')
 
 
-def _parse_header_line(line: str) -> Tuple[str, str]:
+def _parse_header_line(line: str) -> Union[Tuple[str, str], Tuple[None, None]]:
     if '#' in line:
         line = line[:line.find('#')]
     line = line.strip()
     if not line:
         return None, None
     if '=' in line:
-        return line.split('=', 1)
+        return tuple(line.split('=', 1))
     else:
         raise STVParseError(f'invalid STV header line: {line!r}')
 
@@ -393,13 +395,13 @@ def _create_system(title: Optional[str] = None,
                    quota: Optional[Union[str, Tuple[str, str]]] = None,
                    seats: Optional[str] = None,
                    random: Optional[str] = None,
-                   ) -> votelib.VotingSystem:
+                   ) -> votelib.system.VotingSystem:
     if title is not None and not isinstance(title, str):
         if isinstance(title, tuple):
             raise STVParseError('duplicate election title')
         else:
             raise STVParseError(f'invalid election title: {title!r}')
-    return votelib.VotingSystem(title, _create_evaluator(
+    return votelib.system.VotingSystem(title, _create_evaluator(
         method=method, quota=quota, seats=seats, random=random
     ))
 

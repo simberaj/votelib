@@ -9,21 +9,14 @@ cast votes in a ranked election. [#meekm]_
 """
 
 from decimal import Decimal
-from numbers import Number
+from numbers import Real
 from typing import List, Dict, Tuple, Set, Iterable, Optional
 
 import votelib.candidate
 import votelib.util
 import votelib.io.core
 from votelib.candidate import Candidate
-
-
-BLTSpecContents = Tuple[
-    Dict[Tuple[Candidate, ...], Number],    # ranked votes w/o shared ranks
-    int,
-    List[Candidate],
-    Optional[str],
-]
+from votelib.io.core import VotingSetup
 
 
 class NotSupportedInBLT(votelib.io.core.NotSupportedInFormat):
@@ -34,7 +27,7 @@ class BLTParseError(votelib.io.core.ParseError):
     pass
 
 
-def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
+def dump_lines(votes: Dict[Tuple[Candidate, ...], Real],
                n_seats: int,
                candidates: Optional[List[Candidate]] = None,
                election_name: Optional[str] = None,
@@ -70,8 +63,8 @@ def _get_withdrawn_inds(candidates: List[Candidate]) -> List[int]:
 
 def _dump_vote(vote: Tuple[Candidate, ...],
                candidates: List[Candidate],
-               n_votes: Number,
-               ) -> List[Number]:
+               n_votes: Real,
+               ) -> List[Real]:
     try:
         cand_indices = [candidates.index(cand) + 1 for cand in vote]
     except ValueError:
@@ -80,7 +73,7 @@ def _dump_vote(vote: Tuple[Candidate, ...],
         return [n_votes] + cand_indices + [0]
 
 
-def _dump_numline(nums: List[Number]) -> str:
+def _dump_numline(nums: List[Real]) -> str:
     return ' '.join(str(num) for num in nums)
 
 
@@ -90,7 +83,7 @@ def _dump_strline(string: str) -> str:
 
 def load_lines(blt_lines: Iterable[str],
                oneplus_weights: bool = False,
-               ) -> BLTSpecContents:
+               ) -> VotingSetup:
     try:
         n_cands, n_seats = _parse_header(next(blt_lines))
     except StopIteration as e:
@@ -104,11 +97,11 @@ def load_lines(blt_lines: Iterable[str],
         candidates = _numeric_candidates(n_cands)
     candidates = _form_candidate_objects(candidates, withdrawn)
     true_ballots = _deindex_ballots(ballots, candidates)
-    return (
-        true_ballots,
-        n_seats,
-        candidates,
-        election_name,
+    return VotingSetup(
+        votes=true_ballots,
+        n_seats=n_seats,
+        candidates=candidates,
+        election_name=election_name,
     )
 
 
@@ -132,9 +125,9 @@ def _form_candidate_objects(cands: List[str],
     ]
 
 
-def _deindex_ballots(ballots: Dict[Tuple[int, ...], Number],
+def _deindex_ballots(ballots: Dict[Tuple[int, ...], Real],
                      cands: List[Candidate]
-                     ) -> Dict[Tuple[Candidate, ...], Number]:
+                     ) -> Dict[Tuple[Candidate, ...], Real]:
     return {
         tuple(cands[i-1] for i in ballot): n_votes
         for ballot, n_votes in ballots.items()
@@ -157,7 +150,7 @@ def _parse_header(blt_line: str) -> Tuple[int, int]:
 
 def _parse_body(blt_lines: Iterable[str],
                 oneplus_weights: bool = False,
-                ) -> Tuple[Dict[Tuple[int, ...], Number], Set[int]]:
+                ) -> Tuple[Dict[Tuple[int, ...], Real], Set[int]]:
     ballots = {}
     withdrawn = set()
     ballots_encountered = False
@@ -231,7 +224,7 @@ def _clean_line(blt_line: str) -> str:
         return blt_line[:(hash_search_start + leftmost_hash)].rstrip()
 
 
-def _parse_ballot(nums: List[Number]) -> Tuple[Number, Tuple[int, ...]]:
+def _parse_ballot(nums: List[Real]) -> Tuple[Real, Tuple[int, ...]]:
     # Assumes a line with at least one leading non-zero element, all elements
     # apart from the first one are assumed to be integers.
     # Check the trailing zero and strip it.
@@ -245,7 +238,7 @@ def _parse_ballot(nums: List[Number]) -> Tuple[Number, Tuple[int, ...]]:
 
 def _parse_numline(blt_line: str,
                    allow_first_decimal: bool = False,
-                   ) -> List[Number]:
+                   ) -> List[Real]:
     blt_line = _clean_line(blt_line)
     # Return empty lines as None.
     if not blt_line:
