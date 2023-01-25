@@ -75,7 +75,7 @@ class Tie(frozenset):
 
         Produces ties where the rankings do not agree.
         """
-        raise NotImplementedError
+        raise NotImplementedError("rank tying not implemented")
 
     @classmethod
     def break_by_list(cls,

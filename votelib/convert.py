@@ -263,14 +263,24 @@ class RankedToFirstPreference:
     """
     def convert(self,
                 votes: Dict[RankedVoteType, int],
-                ) -> Dict[Candidate, int]:
+                ) -> Dict[Candidate, Union[int, Fraction]]:
         """Convert ranked votes to simple votes by taking first choices."""
         output = {
             cand: 0 for cand in votelib.util.all_ranked_candidates(votes)
         }
         for ranking, n_votes in votes.items():
             if ranking:
-                output[ranking[0]] += n_votes
+                first_choice = ranking[0]
+                is_set = (
+                    hasattr(first_choice, '__len__')
+                    and not isinstance(first_choice, str)
+                )
+                if is_set:
+                    add_to_each = Fraction(n_votes, len(first_choice))
+                    for cand in first_choice:
+                        output[cand] += add_to_each
+                else:
+                    output[first_choice] += n_votes
         return output
 
 
@@ -376,7 +386,11 @@ class RankedToPositionalVotes:
             )
             for rank, positioned in enumerate(ranked):
                 score = this_rank_scores[rank] * n_votes
-                if hasattr(positioned, '__len__'):
+                is_set = (
+                    hasattr(positioned, '__len__')
+                    and not isinstance(positioned, str)
+                )
+                if is_set:
                     for cand in positioned:
                         agg_votes[cand] += score
                 else:

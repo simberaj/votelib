@@ -654,13 +654,15 @@ def sequential_multiwinner(class_: type) -> type:
         tier_votes = votes
         while True:
             winner = self.select_one(tier_votes)
-            if isinstance(winner, votelib.evaluate.core.Tie):
-                raise NotImplementedError(
-                    f'tie in sequential multiwinner: {winner}'
-                )
             logger.info('adding %s to winners', winner)
-            ranked_set.append(winner)
-            eligible_set.remove(winner)
+            if isinstance(winner, votelib.evaluate.core.Tie):
+                tied_seats = min(n_seats - len(ranked_set), len(winner))
+                ranked_set += [winner] * tied_seats
+                for cand in winner:
+                    eligible_set.remove(cand)
+            else:
+                ranked_set.append(winner)
+                eligible_set.remove(winner)
             if len(ranked_set) == n_seats or not eligible_set:
                 return ranked_set
             else:
