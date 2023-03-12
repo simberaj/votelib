@@ -21,13 +21,13 @@ distributors.
 
 import math
 from typing import Dict, Tuple
-from numbers import Number
+from numbers import Real
 
 from votelib.candidate import Candidate
 
 
-def gallagher(votes: Dict[Candidate, Number],
-              results: Dict[Candidate, Number],
+def gallagher(votes: Dict[Candidate, Real],
+              results: Dict[Candidate, Real],
               ) -> float:
     """Compute the Gallagher index of election result disproportionality.
 
@@ -51,8 +51,8 @@ def gallagher(votes: Dict[Candidate, Number],
     ))
 
 
-def loosemore_hanby(votes: Dict[Candidate, Number],
-                    results: Dict[Candidate, Number],
+def loosemore_hanby(votes: Dict[Candidate, Real],
+                    results: Dict[Candidate, Real],
                     ) -> float:
     """Compute the Loosemore–Hanby index of election result disproportionality.
 
@@ -76,8 +76,8 @@ def loosemore_hanby(votes: Dict[Candidate, Number],
     )
 
 
-def rose(votes: Dict[Candidate, Number],
-         results: Dict[Candidate, Number],
+def rose(votes: Dict[Candidate, Real],
+         results: Dict[Candidate, Real],
          ) -> float:
     """Compute the Rose disproportionality index (inverse LH). [#kalog]_
 
@@ -90,8 +90,8 @@ def rose(votes: Dict[Candidate, Number],
     return 1 - loosemore_hanby(votes, results)
 
 
-def rae(votes: Dict[Candidate, Number],
-        results: Dict[Candidate, Number],
+def rae(votes: Dict[Candidate, Real],
+        results: Dict[Candidate, Real],
         ) -> float:
     """Compute Rae's index of disproportionality. [#kalog]_
 
@@ -108,8 +108,8 @@ def rae(votes: Dict[Candidate, Number],
     ) / len(paired_fractions)
 
 
-def lijphart(votes: Dict[Candidate, Number],
-             results: Dict[Candidate, Number],
+def lijphart(votes: Dict[Candidate, Real],
+             results: Dict[Candidate, Real],
              ) -> float:
     """Compute the Lijphart's index of disproportionality. [#kalog]_
 
@@ -126,8 +126,8 @@ def lijphart(votes: Dict[Candidate, Number],
     )
 
 
-def sainte_lague(votes: Dict[Candidate, Number],
-                 results: Dict[Candidate, Number],
+def sainte_lague(votes: Dict[Candidate, Real],
+                 results: Dict[Candidate, Real],
                  ) -> float:
     """Compute the Sainte-Laguë index of disproportionality. [#kalog]_
 
@@ -143,8 +143,8 @@ def sainte_lague(votes: Dict[Candidate, Number],
     )
 
 
-def d_hondt(votes: Dict[Candidate, Number],
-            results: Dict[Candidate, Number],
+def d_hondt(votes: Dict[Candidate, Real],
+            results: Dict[Candidate, Real],
             ) -> float:
     """Compute the D'Hondt index of disproportionality. [#kalog]_
 
@@ -162,8 +162,8 @@ def d_hondt(votes: Dict[Candidate, Number],
     )
 
 
-def regression(votes: Dict[Candidate, Number],
-               results: Dict[Candidate, Number],
+def regression(votes: Dict[Candidate, Real],
+               results: Dict[Candidate, Real],
                ) -> float:
     """Compute the regression index of disproportionality. [#kalog]_
 
@@ -183,9 +183,9 @@ def regression(votes: Dict[Candidate, Number],
     return num / denom
 
 
-def _vote_seat_fractions(votes: Dict[Candidate, Number],
-                         results: Dict[Candidate, Number],
-                         ) -> Dict[Candidate, Tuple[Number, Number]]:
+def _vote_seat_fractions(votes: Dict[Candidate, Real],
+                         results: Dict[Candidate, Real],
+                         ) -> Dict[Candidate, Tuple[Real, Real]]:
     total_votes = sum(votes.values())
     total_seats = sum(results.values())
     merged = {

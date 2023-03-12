@@ -72,9 +72,11 @@ The following classes of votes are supported:
 -   Approval voting
 -   Ranked voting
 -   Score voting (also called range or cardinal voting)
+
 These vote classes can be converted to each other by objects in the `convert`
 module, where you can also find utilities to facilitate district-wise
-elections.
+elections. Combining the above components can create complex systems such as
+mixed-member proportional or multilevel compensatory systems.
 
 The `candidate` and `vote` allow for validity checking of candidate nominations
 and cast ballots respectively.

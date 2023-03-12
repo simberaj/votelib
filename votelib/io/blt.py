@@ -9,21 +9,14 @@ cast votes in a ranked election. [#meekm]_
 """
 
 from decimal import Decimal
-from numbers import Number
-from typing import List, Dict, Tuple, Set, Iterable, Optional
+from numbers import Real
+from typing import List, Dict, Tuple, Set, Iterable, Optional, Union
 
 import votelib.candidate
 import votelib.util
 import votelib.io.core
 from votelib.candidate import Candidate
-
-
-BLTSpecContents = Tuple[
-    Dict[Tuple[Candidate, ...], Number],    # ranked votes w/o shared ranks
-    int,
-    List[Candidate],
-    Optional[str],
-]
+from votelib.io.core import ElectionData
 
 
 class NotSupportedInBLT(votelib.io.core.NotSupportedInFormat):
@@ -34,11 +27,34 @@ class BLTParseError(votelib.io.core.ParseError):
     pass
 
 
-def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
-               n_seats: int,
+def dump_lines(data: Union[Dict[Tuple[Candidate, ...], Real], ElectionData],
+               n_seats: Optional[int] = None,
                candidates: Optional[List[Candidate]] = None,
                election_name: Optional[str] = None,
                ) -> Iterable[str]:
+    """Dump the election data into a BLT file.
+
+    :param data: Ranked votes for the election, or an election data object.
+        If an election data object is given, all other parameters are ignored.
+    :param n_seats: Number of seats contested. Supplying this along with a
+        fixed seat count evaluator will result in a duplicate marking in the
+        output.
+    :param candidates: List of candidates participating in the election.
+        If None, will be inferred from votes.
+    :param election_name: Name of the election in which the given votes were
+        cast.
+    """
+    if isinstance(data, ElectionData):
+        yield from dump_lines(
+            data=data.votes,
+            n_seats=data.n_seats,
+            candidates=data.candidates,
+            election_name=data.election_name,
+        )
+        return
+    if n_seats is None:
+        raise ValueError('need n_seats when voting setup not given')
+    votes = data
     if candidates is None:
         candidates = votelib.util.all_ranked_candidates(votes)
     yield _dump_numline([len(candidates), n_seats])
@@ -70,8 +86,8 @@ def _get_withdrawn_inds(candidates: List[Candidate]) -> List[int]:
 
 def _dump_vote(vote: Tuple[Candidate, ...],
                candidates: List[Candidate],
-               n_votes: Number,
-               ) -> List[Number]:
+               n_votes: Real,
+               ) -> List[Real]:
     try:
         cand_indices = [candidates.index(cand) + 1 for cand in vote]
     except ValueError:
@@ -80,7 +96,7 @@ def _dump_vote(vote: Tuple[Candidate, ...],
         return [n_votes] + cand_indices + [0]
 
 
-def _dump_numline(nums: List[Number]) -> str:
+def _dump_numline(nums: List[Real]) -> str:
     return ' '.join(str(num) for num in nums)
 
 
@@ -90,7 +106,7 @@ def _dump_strline(string: str) -> str:
 
 def load_lines(blt_lines: Iterable[str],
                oneplus_weights: bool = False,
-               ) -> BLTSpecContents:
+               ) -> ElectionData:
     try:
         n_cands, n_seats = _parse_header(next(blt_lines))
     except StopIteration as e:
@@ -104,11 +120,11 @@ def load_lines(blt_lines: Iterable[str],
         candidates = _numeric_candidates(n_cands)
     candidates = _form_candidate_objects(candidates, withdrawn)
     true_ballots = _deindex_ballots(ballots, candidates)
-    return (
-        true_ballots,
-        n_seats,
-        candidates,
-        election_name,
+    return ElectionData(
+        votes=true_ballots,
+        n_seats=n_seats,
+        candidates=candidates,
+        election_name=election_name,
     )
 
 
@@ -132,9 +148,9 @@ def _form_candidate_objects(cands: List[str],
     ]
 
 
-def _deindex_ballots(ballots: Dict[Tuple[int, ...], Number],
+def _deindex_ballots(ballots: Dict[Tuple[int, ...], Real],
                      cands: List[Candidate]
-                     ) -> Dict[Tuple[Candidate, ...], Number]:
+                     ) -> Dict[Tuple[Candidate, ...], Real]:
     return {
         tuple(cands[i-1] for i in ballot): n_votes
         for ballot, n_votes in ballots.items()
@@ -157,7 +173,7 @@ def _parse_header(blt_line: str) -> Tuple[int, int]:
 
 def _parse_body(blt_lines: Iterable[str],
                 oneplus_weights: bool = False,
-                ) -> Tuple[Dict[Tuple[int, ...], Number], Set[int]]:
+                ) -> Tuple[Dict[Tuple[int, ...], Real], Set[int]]:
     ballots = {}
     withdrawn = set()
     ballots_encountered = False
@@ -231,7 +247,7 @@ def _clean_line(blt_line: str) -> str:
         return blt_line[:(hash_search_start + leftmost_hash)].rstrip()
 
 
-def _parse_ballot(nums: List[Number]) -> Tuple[Number, Tuple[int, ...]]:
+def _parse_ballot(nums: List[Real]) -> Tuple[Real, Tuple[int, ...]]:
     # Assumes a line with at least one leading non-zero element, all elements
     # apart from the first one are assumed to be integers.
     # Check the trailing zero and strip it.
@@ -245,7 +261,7 @@ def _parse_ballot(nums: List[Number]) -> Tuple[Number, Tuple[int, ...]]:
 
 def _parse_numline(blt_line: str,
                    allow_first_decimal: bool = False,
-                   ) -> List[Number]:
+                   ) -> List[Real]:
     blt_line = _clean_line(blt_line)
     # Return empty lines as None.
     if not blt_line:

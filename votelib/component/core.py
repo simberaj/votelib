@@ -12,7 +12,7 @@ def marker(register: Dict[str, Callable],
            signature,
            ) -> Callable[[Callable], Callable]:
     """A registration decorator factory."""
-    def mark_function(func):
+    def mark_function(func: Callable) -> Callable:
         register[func.__name__] = func
         return func
     return mark_function
@@ -21,7 +21,7 @@ def marker(register: Dict[str, Callable],
 def getter(register: Dict[str, Callable],
            name: str,
            signature,
-           ) -> Callable[[Callable], Callable]:
+           ) -> Callable[[str], Callable]:
     """A register retriever factory."""
     def get(func_def: str) -> signature:
         f"""Return a {name} function by its name."""

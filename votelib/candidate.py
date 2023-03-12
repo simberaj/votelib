@@ -20,6 +20,7 @@ assigned arbitrary additional properties, so they, too, can be used.
 from __future__ import annotations
 
 import abc
+import functools
 from typing import Any, List, Optional, Union, Dict
 
 from votelib.persist import simple_serialization
@@ -85,6 +86,7 @@ class IndividualElectionOption(CandidateObject):
 
 
 @simple_serialization
+@functools.total_ordering
 class Person(IndividualElectionOption):
     """A physical person standing for the election.
 
@@ -113,6 +115,39 @@ class Person(IndividualElectionOption):
         self.properties = properties if properties is not None else {}
         self.withdrawn = withdrawn
 
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+    def __eq__(self, other: Person) -> bool:
+        return (
+            isinstance(other, self.__class__)
+            and self.__dict__ == other.__dict__
+        )
+
+    def __lt__(self, other: Person) -> bool:
+        if not isinstance(other, Person):
+            return NotImplemented
+        return repr(self) < repr(other)
+
+    def __str__(self) -> str:
+        s = self.name
+        bracket_contents = []
+        if self.membership or self.candidacy_for:
+            p = self.candidacy_for if self.candidacy_for else self.membership
+            if isinstance(p, str):
+                bracket_contents.append(p)
+            else:
+                bracket_contents.append(
+                    p.abbreviation if p.abbreviation else p.name
+                )
+        if self.number:
+            bracket_contents.append(str(self.number))
+        if self.withdrawn:
+            bracket_contents.append('withdrawn')
+        if bracket_contents:
+            s += ' (' + ', '.join(bracket_contents) + ')'
+        return s
+
     def __repr__(self) -> str:
         return (
             f'<Person({self.name}'
@@ -124,7 +159,7 @@ class Person(IndividualElectionOption):
 class ElectionParty(CandidateObject):
     """A subject that is regarded as a political party for the election."""
 
-    is_coalition = NotImplemented
+    is_coalition: bool = NotImplemented
     '''Whether the party is a coalition.
 
     This makes a difference for some systems; the most common case is a
@@ -139,14 +174,15 @@ class PoliticalParty(ElectionParty):
     :param name: Name of the party, in any customary text format.
     :param number: Candidacy number assigned to the party for the purpose
         of the election; usually drawn by lot.
-    :param affiliation: Other (e.g. national or supranational) parties this
+    :param affiliations: Other (e.g. national or supranational) parties this
         party is affiliated with, if any.
     :param lead: A person that leads the party into the elections.
     """
-    is_coalition = False
+    is_coalition: bool = False
 
     def __init__(self,
                  name: str,
+                 abbreviation: Optional[str] = None,
                  number: Optional[int] = None,
                  affiliations: Optional[List[PoliticalParty]] = None,
                  lead: Optional[Person] = None,
@@ -154,6 +190,7 @@ class PoliticalParty(ElectionParty):
                  withdrawn: bool = False,
                  ):
         self.name = name
+        self.abbreviation = abbreviation
         self.number = number
         self.affiliations = affiliations
         self.lead = lead
@@ -181,7 +218,7 @@ class Coalition(ElectionParty):
         coalition is affiliated with, if any.
     :param lead: A person that leads the coalition into the elections.
     """
-    is_coalition = True
+    is_coalition: bool = True
 
     def __init__(self,
                  parties: List[PoliticalParty],
@@ -276,7 +313,7 @@ class IndividualToPartyMapper:
         if party is None:
             if self.independents == 'error':
                 raise CandidateError(
-                    f'independent {cand} not allowed in aggregation'
+                    f'independent {cand!r} not allowed in aggregation'
                 )
             elif self.independents == 'keep':
                 return cand

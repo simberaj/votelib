@@ -9,6 +9,7 @@ import sys
 import itertools
 import collections
 import logging
+import typing
 from fractions import Fraction
 from typing import Any, List, Dict, Tuple, Union, Callable, Optional
 from numbers import Number
@@ -626,6 +627,52 @@ RANKED_SUBSETTER = votelib.convert.SubsettedVotes(
 RANKED_TO_CONDORCET = votelib.convert.RankedToCondorcetVotes()
 
 
+def sequential_multiwinner(class_: type) -> type:
+    """Add sequential multiwinner capability to singlewinner-definned systems.
+
+    Some election evaluators only define how to select a single winner (e.g.
+    Tideman Alternative or Benham systems). This decorator extends those
+    evaluators to enable them to provide correct results when selecting more
+    than one winner (n_seats > 1). This is done by selecting a single winner
+    and then repeating the election among the remaining candidates until
+    a sufficient amount of winners is selected.
+
+    :param class_: The class to add the method to. It has to implement a
+        *select_one* method that takes a *votes* dictionary and returns
+        a single candidate.
+    """
+    if not hasattr(class_, 'select_one'):
+        raise TypeError('decorated class must implement a select_one method')
+    vote_dict_type = typing.get_type_hints(class_.select_one)['votes']
+
+    def evaluate(self,
+                 votes: vote_dict_type,
+                 n_seats: int = 1,
+                 ) -> List[Candidate]:
+        ranked_set = []
+        eligible_set = set(votelib.util.all_ranked_candidates(votes))
+        tier_votes = votes
+        while True:
+            winner = self.select_one(tier_votes)
+            logger.info('adding %s to winners', winner)
+            if isinstance(winner, votelib.evaluate.core.Tie):
+                tied_seats = min(n_seats - len(ranked_set), len(winner))
+                ranked_set += [winner] * tied_seats
+                for cand in winner:
+                    eligible_set.remove(cand)
+            else:
+                ranked_set.append(winner)
+                eligible_set.remove(winner)
+            if len(ranked_set) == n_seats or not eligible_set:
+                return ranked_set
+            else:
+                tier_votes = RANKED_SUBSETTER.convert(tier_votes, eligible_set)
+
+    class_.evaluate = evaluate
+    return class_
+
+
+@sequential_multiwinner
 class TidemanAlternative:
     """Tideman alternative selector (Alternative Smith/Schwartz). [#tidaltw]_
 
@@ -648,24 +695,7 @@ class TidemanAlternative:
                  ):
         self.set_selector = set_selector
 
-    def evaluate(self,
-                 votes: Dict[RankedVoteType, int],
-                 n_seats: int = 1,
-                 ) -> List[Candidate]:
-        ranked_set = []
-        eligible_set = set(votelib.util.all_ranked_candidates(votes))
-        tier_votes = votes
-        while True:
-            winner = self.run_tier(tier_votes)
-            logger.info('adding %s to winners', winner)
-            ranked_set.append(winner)
-            eligible_set.remove(winner)
-            if len(ranked_set) == n_seats or not eligible_set:
-                return ranked_set
-            else:
-                tier_votes = RANKED_SUBSETTER.convert(tier_votes)
-
-    def run_tier(self, votes: Dict[RankedVoteType, int]) -> Candidate:
+    def select_one(self, votes: Dict[RankedVoteType, int]) -> Candidate:
         round_votes = votes
         while round_votes:
             s_set_list = self.get_winner_set(round_votes)
@@ -695,28 +725,30 @@ def eliminate_one(votes: Dict[RankedVoteType, int]) -> List[Candidate]:
     )
 
 
+@sequential_multiwinner
 class Benham:
     """Benham sequential Condorcet selector. [#gacondo]_
 
     Selects a Condorcet winner. If one does not exist, eliminates one candidate
     using transferable vote (instant-runoff) and re-runs.
+    For election of multiple candidates, it runs in multiple tiers where
+    previous winners are eliminated from all following tiers.
     """
     CONDO = votelib.evaluate.condorcet.CondorcetWinner()
 
-    def evaluate(self,
-                 votes: Dict[RankedVoteType, int],
-                 n_seats: int = 1) -> List[Candidate]:
-        assert n_seats == 1
+    def select_one(self,
+                   votes: Dict[RankedVoteType, int],
+                   ) -> Candidate:
         current_votes = votes
         condowin = self.get_condorcet_winner(current_votes)
         while condowin is None:
             remains = eliminate_one(current_votes)
             if len(remains) == 1:
-                return remains
+                return remains[0]
             else:
                 current_votes = RANKED_SUBSETTER.convert(votes, remains)
                 condowin = self.get_condorcet_winner(current_votes)
-        return [condowin]
+        return condowin
 
     def get_condorcet_winner(self,
                              votes: Dict[RankedVoteType, int],
@@ -728,7 +760,11 @@ class Benham:
 class Baldwin:
     """Baldwin's sequential Borda elimination method."""
 
-    def __init__(self, converter: Optional[votelib.convert.RankedToPositionalVotes] = None):
+    def __init__(self,
+                 converter: Optional[
+                     votelib.convert.RankedToPositionalVotes
+                 ] = None
+                 ):
         if converter is None:
             converter = votelib.convert.RankedToPositionalVotes(
                 rank_scorer=votelib.component.rankscore.Borda(base=0)
@@ -767,7 +803,7 @@ class Baldwin:
                 remaining = [cand for cand in neg_scores if cand != loser]
             current_votes = RANKED_SUBSETTER.convert(current_votes, remaining)
             neg_scores = self._compute_negative_scores(current_votes)
-        return votelib.evaluate.core.get_n_best(neg_scores, n_seats)
+        return votelib.evaluate.core.get_n_best(neg_scores, n_seats)[::-1]
 
     def _compute_negative_scores(self,
                                  votes: Dict[RankedVoteType, int]

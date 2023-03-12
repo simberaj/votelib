@@ -9,11 +9,15 @@ import collections
 import bisect
 import random
 from fractions import Fraction
-from typing import Any, List, Tuple, Dict, Iterable
-from numbers import Number
+from typing import Any, List, Tuple, Dict, Iterable, TypeVar
+from numbers import Number, Real, Rational
 
-from votelib.vote import RankedVoteType, ScoreVoteType
+import votelib.vote
+from votelib.vote import RankedVoteType, ScoreVoteType, AnyVoteType
 from votelib.candidate import Candidate
+
+
+Num = TypeVar("Num", bound=Number)
 
 
 def add_dict_to_dict(dict1: Dict[Any, Number],
@@ -23,15 +27,15 @@ def add_dict_to_dict(dict1: Dict[Any, Number],
         dict1[key] = dict1.get(key, 0) + addition
 
 
-def sum_dicts(dict1: Dict[Any, Number],
-              dict2: Dict[Any, Number],
-              ) -> Dict[Any, Number]:
+def sum_dicts(dict1: Dict[Any, Num],
+              dict2: Dict[Any, Num],
+              ) -> Dict[Any, Num]:
     summed = dict1.copy()
     add_dict_to_dict(summed, dict2)
     return summed
 
 
-def descending_dict(d: Dict[Any, Number]) -> Dict[Any, Number]:
+def descending_dict(d: Dict[Any, Num]) -> Dict[Any, Num]:
     return dict(sorted(d.items(), key=operator.itemgetter(1), reverse=True))
 
 
@@ -68,6 +72,28 @@ def all_scored_candidates(votes: Dict[ScoreVoteType, Any]
     ))
 
 
+def all_voted_for_candidates(votes: Dict[AnyVoteType, Any]
+                             ) -> List[Candidate]:
+    """Return a list of all candidates appearing in any of the votes.
+
+    Does not guarantee the preservation of input ordering. Works with all
+    recognized types of votes (simple, approval, ranked, score).
+
+    :returns: All unique candidates from the input votes.
+    """
+    vote_type = votelib.vote.detect_vote_type(next(iter(votes)))
+    if vote_type == Candidate:
+        return list(frozenset(votes.keys()))
+    elif vote_type == frozenset:
+        return list(frozenset(cand for vote in votes for cand in vote))
+    elif vote_type == RankedVoteType:
+        return all_ranked_candidates(votes)
+    elif vote_type == ScoreVoteType:
+        return all_scored_candidates(votes)
+    else:
+        raise ValueError(f'unknown vote type: {vote_type}')
+
+
 def all_rankings(votes: Dict[RankedVoteType, Any]
                  ) -> Iterable[Tuple[Candidate, int, Any]]:
     rank_i = 0
@@ -96,9 +122,9 @@ def distribution_to_selection(d: Dict[Any, Number]) -> List[Any]:
     )])
 
 
-def sorted_votes(votes: Dict[Any, Number],
+def sorted_votes(votes: Dict[Any, Num],
                  descending: bool = True,
-                 ) -> List[Tuple[Any, Number]]:
+                 ) -> List[Tuple[Any, Num]]:
     """Return votes items sorted by value."""
     return list(sorted(
         votes.items(),
@@ -107,7 +133,7 @@ def sorted_votes(votes: Dict[Any, Number],
     ))
 
 
-def select_n_random(votes: Dict[Any, Number],
+def select_n_random(votes: Dict[Any, Real],
                     n: int = 1,
                     ) -> List[Any]:
     candidates, weights = zip(*sorted_votes(votes))
@@ -150,7 +176,7 @@ def _select_n_random_int(candidates: List[Any],
 
 
 def _select_n_random_float(candidates: List[Any],
-                           cum_weights: List[Number],
+                           cum_weights: List[float],
                            n: int,
                            ) -> List[Any]:
     return random.choices(
@@ -162,10 +188,10 @@ def _select_n_random_float(candidates: List[Any],
 
 def exact_mean(values: List[Number]) -> Number:
     total = sum(values)
-    if isinstance(total, float):
-        return total / len(values)
-    else:
+    if isinstance(total, Rational):
         return Fraction(total, len(values))
+    else:
+        return total / len(values)
 
 
 EXACT_AGGREGATORS = {

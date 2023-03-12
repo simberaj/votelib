@@ -29,9 +29,10 @@ Some converter objects wrap these validators and catch these errors to remove
 invalid votes, for example.
 """
 
+from __future__ import annotations
 import abc
 from typing import Any, Tuple, FrozenSet, Dict, Union, Optional, Collection
-from numbers import Number
+from numbers import Number, Real
 
 import collections
 
@@ -53,10 +54,10 @@ class VoteTypeError(VoteError):
     :param vtype: Vote type detected as invalid.
     :param expected: Vote type that was expected.
     """
-    def __init__(self, vtype: type, expected: type = None):
-        self.vtype = vtype
+    def __init__(self, vote: AnyVoteType, expected: type = None):
+        self.vote = vote
         self.expected = expected
-        message = f'invalid vote type: {vtype}'
+        message = f'{vote} has invalid vote type: {type(vote)}'
         if expected:
             message += f', must be {expected}'
         super().__init__(message)
@@ -119,10 +120,17 @@ class VoteValueError(VoteError):
 SimpleVoteType = Candidate
 ApprovalVoteType = FrozenSet[Candidate]
 RankedVoteType = Tuple[Union[Candidate, FrozenSet[Candidate]], ...]
-ScoreVoteType = FrozenSet[Tuple[Candidate, Any]]
+ScoreVoteType = FrozenSet[Tuple[Candidate, Real]]
+
+AnyVoteType = Union[
+    SimpleVoteType,
+    ApprovalVoteType,
+    RankedVoteType,
+    ScoreVoteType,
+]
 
 IntBoundsTupleType = Tuple[Optional[int], Optional[int]]
-NumBoundsTupleType = Tuple[Optional[Number], Optional[Number]]
+NumBoundsTupleType = Tuple[Optional[Real], Optional[Real]]
 
 
 class VoteMagnitudeChecker:
@@ -381,7 +389,7 @@ class ScoreVoteValidator:
         self.sum_checkers = sum_checkers
         self.nominator = nominator
 
-    def validate(self, vote: ScoreVoteType) -> bool:
+    def validate(self, vote: ScoreVoteType) -> None:
         if not isinstance(vote, frozenset):
             raise VoteTypeError(vote, frozenset)
         n_scorings = len(vote)
@@ -460,7 +468,7 @@ class EnumScoreVoteValidator(ScoreVoteValidator):
         )
         self.score_levels = list(score_levels)
 
-    def validate(self, vote: ScoreVoteType) -> bool:
+    def validate(self, vote: ScoreVoteType) -> None:
         """Check if the enumeration-based score vote is valid.
 
         :param vote: Score vote to be checked.
@@ -540,7 +548,7 @@ class RangeVoteValidator(ScoreVoteValidator):
             range_checker = VoteMagnitudeChecker(range, 'range vote value')
         self.range_checker = range_checker
 
-    def validate(self, vote: ScoreVoteType) -> bool:
+    def validate(self, vote: ScoreVoteType) -> None:
         """Check if the range vote is valid.
 
         :param vote: Range (score) vote to be checked.
@@ -580,7 +588,7 @@ class VoteSubsetter(metaclass=abc.ABCMeta):
 
 
 @simple_serialization
-class SimpleSubsetter:
+class SimpleSubsetter(VoteSubsetter):
     """A subsetter for simple votes."""
 
     def subset(self,
@@ -592,7 +600,7 @@ class SimpleSubsetter:
 
 
 @simple_serialization
-class ApprovalSubsetter:
+class ApprovalSubsetter(VoteSubsetter):
     """A subsetter for approval votes."""
 
     def subset(self,
@@ -607,7 +615,7 @@ class ApprovalSubsetter:
 
 
 @simple_serialization
-class RankedSubsetter:
+class RankedSubsetter(VoteSubsetter):
     """A subsetter for ranked votes."""
     # TODO: implement keeping ranks as skipped
 
@@ -638,7 +646,7 @@ class RankedSubsetter:
 
 
 @simple_serialization
-class ScoreSubsetter:
+class ScoreSubsetter(VoteSubsetter):
     """A subsetter for score votes."""
 
     def subset(self,
@@ -656,3 +664,16 @@ class ScoreSubsetter:
             if cand in subset:
                 sub_score.add((cand, score))
         return frozenset(sub_score)
+
+
+def detect_vote_type(vote: AnyVoteType) -> type:
+    """Return a type annotation object corresponding to the vote type."""
+    if isinstance(vote, frozenset):
+        if all(isinstance(item, tuple) for item in vote):
+            return ScoreVoteType
+        else:
+            return ApprovalVoteType
+    elif isinstance(vote, tuple):
+        return RankedVoteType
+    else:
+        return SimpleVoteType
