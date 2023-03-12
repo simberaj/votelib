@@ -119,7 +119,10 @@ class Person(IndividualElectionOption):
         return hash(self.name)
 
     def __eq__(self, other: Person) -> bool:
-        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+        return (
+            isinstance(other, self.__class__)
+            and self.__dict__ == other.__dict__
+        )
 
     def __lt__(self, other: Person) -> bool:
         if not isinstance(other, Person):
@@ -131,9 +134,12 @@ class Person(IndividualElectionOption):
         bracket_contents = []
         if self.membership or self.candidacy_for:
             p = self.candidacy_for if self.candidacy_for else self.membership
-            bracket_contents.append(
-                p.abbreviation if p.abbreviation else p.name
-            )
+            if isinstance(p, str):
+                bracket_contents.append(p)
+            else:
+                bracket_contents.append(
+                    p.abbreviation if p.abbreviation else p.name
+                )
         if self.number:
             bracket_contents.append(str(self.number))
         if self.withdrawn:
@@ -307,7 +313,7 @@ class IndividualToPartyMapper:
         if party is None:
             if self.independents == 'error':
                 raise CandidateError(
-                    f'independent {cand} not allowed in aggregation'
+                    f'independent {cand!r} not allowed in aggregation'
                 )
             elif self.independents == 'keep':
                 return cand

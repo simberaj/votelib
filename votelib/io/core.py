@@ -5,7 +5,8 @@ from __future__ import annotations
 import dataclasses
 import typing
 from numbers import Real
-from typing import Any, List, Dict, Tuple, Callable, Iterable, TextIO, TypeVar, Optional
+from typing import Any, List, Dict, Tuple, Callable, Iterable, TextIO,\
+    TypeVar, Optional
 
 import votelib.system
 from votelib.candidate import Candidate
@@ -29,7 +30,7 @@ class ParseError(Exception):
 
 
 @dataclasses.dataclass
-class VotingSetup:
+class ElectionData:
     """A container for data returnable from a ballot file."""
     votes: Dict[AnyVoteType, Real]
     system: Optional[votelib.system.VotingSystem] = None
@@ -38,8 +39,9 @@ class VotingSetup:
     election_name: Optional[str] = None
 
 
-def loaders(line_loader: Callable[..., VotingSetup]
-            ) -> Tuple[Callable[..., VotingSetup], Callable[..., VotingSetup]]:
+def loaders(
+    line_loader: Callable[..., ElectionData]
+) -> Tuple[Callable[..., ElectionData], Callable[..., ElectionData]]:
     """Create load() and loads() functions from an iterating function."""
     return_annot = typing.get_type_hints(line_loader).get('return')
     if return_annot is None:

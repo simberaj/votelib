@@ -88,7 +88,7 @@ def nz_leg_2014_electorate_data():
     }
 
 
-def test_nz_leg_2014(nz_leg_2014_electorate_data):
+def test_nz_leg_2014_raw(nz_leg_2014_electorate_data):
     elect_res = NZ_ELECTORATE_EVAL.evaluate(nz_leg_2014_electorate_data)
     assert elect_res == {
         'ACT New Zealand': 1,
@@ -97,6 +97,9 @@ def test_nz_leg_2014(nz_leg_2014_electorate_data):
         'National Party': 41,
         'United Future': 1,
     }
+
+
+def test_nz_leg_2014(nz_leg_2014_electorate_data):
     total_evaluator = votelib.evaluate.core.MultistageDistributor([
         NZ_ELECTORATE_EVAL,
         votelib.evaluate.core.AdjustedSeatCount(
@@ -104,10 +107,6 @@ def test_nz_leg_2014(nz_leg_2014_electorate_data):
             NZ_PARTYLIST_EVAL,
         )
     ])
-        # NZ_ELECTORATE_EVAL, NZ_PARTYLIST_EVAL,
-        # proportional=NZ_PARTYLIST_EVAL.evaluator,
-        # method='allow',
-    # )
     total_res = total_evaluator.evaluate(
         [nz_leg_2014_electorate_data, NZ_LEG_2014_PARTY_VOTE], 120
     )

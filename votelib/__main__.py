@@ -16,7 +16,7 @@ import votelib.util
 import votelib.io.blt
 import votelib.io.stv
 from votelib.candidate import Candidate
-from votelib.io.core import VotingSetup
+from votelib.io.core import ElectionData
 from votelib.system import VotingSystem
 from votelib.vote import AnyVoteType, SimpleVoteType, ApprovalVoteType, \
     RankedVoteType, ScoreVoteType
@@ -53,7 +53,10 @@ argparser.add_argument(
 argparser.add_argument(
     '-d', '--is-distribution',
     action='store_true',
-    help='sets a distribution election (one candidate might get multiple seats)',
+    help=(
+        'sets a distribution election (one candidate might get'
+        ' multiple seats)'
+    ),
 )
 argparser.add_argument(
     '-f', '--input-format',
@@ -131,7 +134,7 @@ def main(input_file: io.TextIOBase,
 
 def load_votes(input_file: io.TextIOBase,
                input_format: str,
-               ) -> VotingSetup:
+               ) -> ElectionData:
     """Load votes from the given file, expecting the given format."""
     try:
         loader = getattr(votelib.io, input_format)
@@ -169,7 +172,8 @@ def show_vote_stats(votes: Dict[AnyVoteType, Real],
     print(f'Received {sum(votes.values())} {VOTE_TYPE_NAMES[vote_type]} votes')
     print(f'Awarding {n_seats} seats')
     all_cands = sorted(votelib.util.all_voted_for_candidates(votes))
-    print(f'{len(all_cands)} candidates with any votes cast (in alphabetical order):')
+    print(f'{len(all_cands)} candidates with any votes cast'
+          f' (in alphabetical order):')
     for cand in all_cands:
         print(' ' * 10 + str(cand))
 

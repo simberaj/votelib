@@ -9,10 +9,11 @@ import votelib.io.stv
 import votelib.convert
 import votelib.evaluate.auxiliary
 import votelib.evaluate.sequential
+import votelib.system
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
-CUSTOM_SYSTEM = votelib.VotingSystem(
+CUSTOM_SYSTEM = votelib.system.VotingSystem(
     'Example Election',
     votelib.evaluate.TieBreaking(
         votelib.evaluate.sequential.TransferableVoteSelector(
@@ -31,7 +32,7 @@ CUSTOM_VOTES = {
     tuple('DAE'): 10,
 }
 CUSTOM_N_SEATS = 2
-UNORDERED_SYSTEM = votelib.VotingSystem(
+UNORDERED_SYSTEM = votelib.system.VotingSystem(
     'STV Voting Example 2007-05-01',
     votelib.evaluate.FixedSeatCount(
         votelib.evaluate.TieBreaking(
@@ -47,7 +48,7 @@ UNORDERED_SYSTEM = votelib.VotingSystem(
         3
     )
 )
-ORDERED_SYSTEM = votelib.VotingSystem(
+ORDERED_SYSTEM = votelib.system.VotingSystem(
     'Test of Choice Voting',
     votelib.evaluate.FixedSeatCount(
         votelib.evaluate.TieBreaking(
@@ -104,8 +105,8 @@ def file_fixture(name: str, filename: str):
 custom_standard_result = file_fixture('custom_standard_result', 'custom.stv')
 custom_blt_result = file_fixture('custom_blt_result', 'custom_blt.stv')
 unordered_out_result = file_fixture('unordered_out_result', 'unordered_out.stv')
-unordered_result = file_fixture('unordered_out_result', 'unordered.stv')
-ordered_result = file_fixture('unordered_out_result', 'ordered.stv')
+unordered_result = file_fixture('unordered_result', 'unordered.stv')
+ordered_result = file_fixture('ordered_result', 'ordered.stv')
 
 
 def test_out_custom_system(custom_standard_result):
@@ -117,9 +118,9 @@ def test_out_custom_blt(custom_blt_result):
 
 
 def test_in_custom_eval(custom_standard_result):
-    votes, system, candidates = votelib.io.stv.loads(custom_standard_result)
-    check_candidates_equal(system.evaluate(votes), ['A', 'C'])
-    check_candidates_equal(system.evaluator.evaluator.evaluate(votes, 1), ['B'])
+    voting_setup = votelib.io.stv.loads(custom_standard_result)
+    check_candidates_equal(voting_setup.system.evaluate(voting_setup.votes), ['A', 'C'])
+    check_candidates_equal(voting_setup.system.evaluator.evaluator.evaluate(voting_setup.votes, 1), ['B'])
 
 
 def test_out_unordered(unordered_out_result):
@@ -172,6 +173,7 @@ def test_out_error_bad_quota():
             ),
         )
 
+
 def test_out_error_equal_ranking():
     with pytest.raises(votelib.io.stv.NotSupportedInSTV):
         votelib.io.stv.dumps(
@@ -179,20 +181,23 @@ def test_out_error_equal_ranking():
             votelib.evaluate.sequential.TransferableVoteSelector(),
         )
 
+
 def test_out_blt():
     assert votelib.io.stv.dumps(BLT_VOTES, n_seats=BLT_N_SEATS) == BLT_RESULT
 
+
 def test_in_blt():
-    votes, system, candidates = votelib.io.stv.loads(BLT_RESULT)
-    check_votes_equal(votes, BLT_VOTES)
-    check_candidates_equal(candidates, list('ABC'))
-    assert system.evaluator.n_seats == BLT_N_SEATS
+    voting_setup = votelib.io.stv.loads(BLT_RESULT)
+    check_votes_equal(voting_setup.votes, BLT_VOTES)
+    check_candidates_equal(voting_setup.candidates, list('ABC'))
+    assert voting_setup.system.evaluator.n_seats == BLT_N_SEATS
 
 
 def test_in_unordered(unordered_result):
-    votes, system, candidates = votelib.io.stv.loads(unordered_result)
-    check_votes_equal(votes, UNORDERED_VOTES)
-    check_candidates_equal(candidates, EXAMPLE_CANDIDATES)
+    voting_setup = votelib.io.stv.loads(unordered_result)
+    check_votes_equal(voting_setup.votes, UNORDERED_VOTES)
+    check_candidates_equal(voting_setup.candidates, EXAMPLE_CANDIDATES)
+    system = voting_setup.system
     # compare systems (via internal components)
     assert isinstance(system, type(UNORDERED_SYSTEM))
     assert system.name == UNORDERED_SYSTEM.name
@@ -208,9 +213,10 @@ def test_in_unordered(unordered_result):
 
 
 def test_in_ordered(ordered_result):
-    votes, system, candidates = votelib.io.stv.loads(ordered_result)
-    check_votes_equal(votes, ORDERED_VOTES)
-    check_candidates_equal(candidates, EXAMPLE_CANDIDATES)
+    voting_setup = votelib.io.stv.loads(ordered_result)
+    check_votes_equal(voting_setup.votes, ORDERED_VOTES)
+    check_candidates_equal(voting_setup.candidates, EXAMPLE_CANDIDATES)
+    system = voting_setup.system
     # compare systems (via internal components)
     assert isinstance(system, type(ORDERED_SYSTEM))
     assert system.name == ORDERED_SYSTEM.name
@@ -243,7 +249,7 @@ def test_in_error_duplicate_title():
 
 
 def test_in_unordered_roundtrip(unordered_out_result):
-    assert votelib.io.stv.dumps(*votelib.io.stv.loads(unordered_out_result)) == unordered_out_result
+    assert votelib.io.stv.dumps(votelib.io.stv.loads(unordered_out_result)) == unordered_out_result
 
 
 def check_votes_equal(tested, expected):
@@ -262,6 +268,7 @@ def check_candidates_equal(tested, expected):
 def test_in_incomplete():
     with pytest.raises(votelib.io.stv.STVParseError):
         votelib.io.stv.loads('method=BC\nquota=hare')
+
 
 def test_in_bad_header():
     with pytest.raises(votelib.io.stv.STVParseError):

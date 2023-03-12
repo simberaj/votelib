@@ -56,3 +56,5 @@ SMITH_SCORE_VOTES = [
 def test_smith_score(votes, expected_winner):
     winner = SMITH_SCORE.evaluate(votes, n_seats=1)
     assert winner == expected_winner
+
+

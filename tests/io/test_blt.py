@@ -31,52 +31,51 @@ def test_incomplete_header():
 
 def test_maemo_blt():
     with open(os.path.join(DATA_DIR, 'maemo.blt'), encoding='utf8') as infile:
-        votes, n_seats, cands, name = votelib.io.blt.load(infile)
-    assert name == 'Community Council Election Q1 2018'
-    assert [cand.name for cand in cands] == [
+        voting_setup = votelib.io.blt.load(infile)
+    assert voting_setup.election_name == 'Community Council Election Q1 2018'
+    assert [cand.name for cand in voting_setup.candidates] == [
         'mosen (Timo Könnecke)',
         'sicelo (Sicelo Mhlongo)',
         'juiceme (Jussi Ohenoja)',
         'm4r0v3r (Martin Ghosal)',
         'eekkelund (Eetu Kahelin)',
     ]
-    assert not any(cand.withdrawn for cand in cands)
-    assert n_seats == 3
+    assert not any(cand.withdrawn for cand in voting_setup.candidates)
+    assert voting_setup.n_seats == 3
     assert sum(
-        n_votes for rvote, n_votes in votes.items()
+        n_votes for rvote, n_votes in voting_setup.votes.items()
         if rvote and rvote[0].name == 'juiceme (Jussi Ohenoja)'
     ) == 31
 
 
 def test_rational_blt():
     with open(os.path.join(DATA_DIR, 'rational.blt'), encoding='utf8') as infile:
-        votes, n_seats, cands, name = votelib.io.blt.load(infile)
-    assert name == 'RationalMedia Board 2020 Election'
-    assert [cand.name for cand in cands] == [
+        voting_setup = votelib.io.blt.load(infile)
+    assert voting_setup.election_name == 'RationalMedia Board 2020 Election'
+    assert [cand.name for cand in voting_setup.candidates] == [
         'Dysk',
         'GrammarCommie',
         'LeftyGreenMario',
         'RoninMacbeth',
         'Other',
     ]
-    assert not any(cand.withdrawn for cand in cands)
-    assert n_seats == 4
+    assert not any(cand.withdrawn for cand in voting_setup.candidates)
+    assert voting_setup.n_seats == 4
     assert sum(
-        n_votes for rvote, n_votes in votes.items()
+        n_votes for rvote, n_votes in voting_setup.votes.items()
         if rvote and rvote[0].name == 'GrammarCommie'
     ) == 0
 
 
-
 def test_atwood_so_blt():
     with open(os.path.join(DATA_DIR, 'atwood_so.blt'), encoding='utf8') as infile:
-        votes, n_seats, cands, name = votelib.io.blt.loads(infile.read())
-    assert name == 'Gardening Club Election'
-    assert [cand.name for cand in cands] == ['Amy', 'Bob', 'Chuck', 'Diane']
-    assert all(cand.withdrawn == (cand.name == 'Bob') for cand in cands)
-    assert n_seats == 2
+        voting_setup = votelib.io.blt.loads(infile.read())
+    assert voting_setup.election_name == 'Gardening Club Election'
+    assert [cand.name for cand in voting_setup.candidates] == ['Amy', 'Bob', 'Chuck', 'Diane']
+    assert all(cand.withdrawn == (cand.name == 'Bob') for cand in voting_setup.candidates)
+    assert voting_setup.n_seats == 2
     assert sum(
-        n_votes for rvote, n_votes in votes.items()
+        n_votes for rvote, n_votes in voting_setup.votes.items()
         if rvote and rvote[0].name == 'Amy'
     ) == 3
 
@@ -89,8 +88,8 @@ def test_fail_empty():
 
 def test_maemo():
     with open(os.path.join(DATA_DIR, 'maemo.blt'), encoding='utf8') as infile:
-        votes, n_seats, cands, name = votelib.io.blt.load(infile)
-    assert [cand.name for cand in STV_EVAL.evaluate(votes, n_seats)] == [
+        voting_setup = votelib.io.blt.load(infile)
+    assert [cand.name for cand in STV_EVAL.evaluate(voting_setup.votes, voting_setup.n_seats)] == [
         'juiceme (Jussi Ohenoja)',
         'mosen (Timo Könnecke)',
         'eekkelund (Eetu Kahelin)'
@@ -99,8 +98,8 @@ def test_maemo():
 
 def test_rational():
     with open(os.path.join(DATA_DIR, 'rational.blt'), encoding='utf8') as infile:
-        votes, n_seats, cands, name = votelib.io.blt.load(infile)
-    assert set(cand.name for cand in STV_EVAL.evaluate(votes, n_seats)) == {
+        voting_setup = votelib.io.blt.load(infile)
+    assert set(cand.name for cand in STV_EVAL.evaluate(voting_setup.votes, voting_setup.n_seats)) == {
         'LeftyGreenMario', 'Dysk', 'GrammarCommie', 'RoninMacbeth'
     }
 
@@ -108,8 +107,8 @@ def test_rational():
 def test_gnome_26():
     # https://vote.gnome.org/results.php?election_id=26
     with open(os.path.join(DATA_DIR, 'gnome_26.blt'), encoding='utf8') as infile:
-        votes, n_seats, cands, name = votelib.io.blt.load(infile)
-    assert set(cand.name for cand in STV_EVAL.evaluate(votes, n_seats)) == {
+        voting_setup = votelib.io.blt.load(infile)
+    assert set(cand.name for cand in STV_EVAL.evaluate(voting_setup.votes, voting_setup.n_seats)) == {
         'Allan Day', 'Carlos Soriano', 'Ekaterina Gerasimova',
         'Federico Mena Quintero', 'Nuritzi Sanchez', 'Philip Chimento',
         'Robert McQueen',
@@ -119,16 +118,16 @@ def test_gnome_26():
 def test_gnome_26_roundtrip():
     with open(os.path.join(DATA_DIR, 'gnome_26.blt'), encoding='utf8') as infile:
         blt_text = infile.read()
-    loaded = votelib.io.blt.loads(blt_text)
-    roundtripped = votelib.io.blt.dumps(*loaded)
+    voting_setup = votelib.io.blt.loads(blt_text)
+    roundtripped = votelib.io.blt.dumps(voting_setup)
     assert roundtripped.strip() == blt_text.strip()
     buffer = io.StringIO()
-    roundtripped_fileobj = votelib.io.blt.dump(buffer, *loaded)
+    roundtripped_fileobj = votelib.io.blt.dump(buffer, voting_setup)
     assert buffer.getvalue().strip() == blt_text.strip()
 
 
 def test_nocand():
-    TEST_S = '''3 1
+    test_s = '''3 1
     -2
     4 2 1 3 0
     2 3 2 1 0
@@ -136,43 +135,46 @@ def test_nocand():
     1 2 3 0
     0
     '''
-    votes, n_seats, cands, name = votelib.io.blt.loads(TEST_S)
+    voting_setup = votelib.io.blt.loads(test_s)
+    cands = voting_setup.candidates
     assert len(cands) == 3
     assert cands[1].withdrawn
-    assert votes == {
+    assert voting_setup.votes == {
         (cands[1], cands[0], cands[2]): 4,
         (cands[2], cands[1], cands[0]): 2,
         (cands[1], cands[2]): 1,
     }
-    assert n_seats == 1
-    assert name is None
+    assert voting_setup.n_seats == 1
+    assert voting_setup.election_name is None
 
 
 def test_incomplete_body():
-    TEST_S = '''3 1
+    test_s = '''3 1
     -2
     4 2 1 3 0
     '''
     with pytest.raises(votelib.io.blt.BLTParseError) as excinfo:
-        votelib.io.blt.loads(TEST_S)
+        votelib.io.blt.loads(test_s)
     assert 'incomplete' in str(excinfo.value)
 
+
 def test_incomplete_row():
-    TEST_S = '''3 1
+    test_s = '''3 1
     -2
     4 2 1 3
     0
     '''
     with pytest.raises(votelib.io.blt.BLTParseError) as excinfo:
-        votelib.io.blt.loads(TEST_S)
+        votelib.io.blt.loads(test_s)
     assert 'must be zero-terminated' in str(excinfo.value)
 
-def test_incomplete_row():
-    TEST_S = '''3 1
+
+def test_row_float():
+    test_s = '''3 1
     -2
     4 2 1 3.5 0
     0
     '''
     with pytest.raises(votelib.io.blt.BLTParseError) as excinfo:
-        votelib.io.blt.loads(TEST_S)
-
+        votelib.io.blt.loads(test_s)
+    assert 'invalid BLT numberline item' in str(excinfo.value)

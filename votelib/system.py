@@ -55,23 +55,33 @@ SIMPLE_DISTRIBUTION_SYSTEMS = {
     ),
     "quota_hb": VotingSystem(
         'Hagenbach-Bischoff Quota',
-        votelib.evaluate.proportional.LargestRemainder(quota_function='hagenbach_bischoff')
+        votelib.evaluate.proportional.LargestRemainder(
+            quota_function='hagenbach_bischoff'
+        )
     ),
     "quota_imperiali": VotingSystem(
         'Imperiali Quota',
-        votelib.evaluate.proportional.LargestRemainder(quota_function='imperiali')
+        votelib.evaluate.proportional.LargestRemainder(
+            quota_function='imperiali'
+        )
     ),
     "d_hondt": VotingSystem(
         'D\'Hondt Divisor',
-        votelib.evaluate.proportional.HighestAverages(divisor_function='d_hondt')
+        votelib.evaluate.proportional.HighestAverages(
+            divisor_function='d_hondt'
+        )
     ),
     "sainte_lague": VotingSystem(
         'Sainte-Lague Divisor',
-        votelib.evaluate.proportional.HighestAverages(divisor_function='sainte_lague')
+        votelib.evaluate.proportional.HighestAverages(
+            divisor_function='sainte_lague'
+        )
     ),
     "imperiali": VotingSystem(
         'Imperiali Divisor',
-        votelib.evaluate.proportional.HighestAverages(divisor_function='imperiali')
+        votelib.evaluate.proportional.HighestAverages(
+            divisor_function='imperiali'
+        )
     ),
 }
 APPROVAL_SELECTION_SYSTEMS = {
@@ -79,29 +89,69 @@ APPROVAL_SELECTION_SYSTEMS = {
         converter=votelib.convert.ApprovalToSimpleVotes(),
         evaluator=votelib.evaluate.Plurality(),
     )),
-    "pav": VotingSystem('Proportional Approval', votelib.evaluate.approval.ProportionalApproval()),
-    "spav": VotingSystem('Sequential Proportional Approval', votelib.evaluate.approval.SequentialProportionalApproval()),
-    "sav": VotingSystem('Satisfaction Approval', votelib.evaluate.core.PreConverted(
-        converter=votelib.convert.ApprovalToSimpleVotes(split=True),
-        evaluator=votelib.evaluate.Plurality(),
-    )),
+    "pav": VotingSystem(
+        'Proportional Approval',
+        votelib.evaluate.approval.ProportionalApproval()
+    ),
+    "spav": VotingSystem(
+        'Sequential Proportional Approval',
+        votelib.evaluate.approval.SequentialProportionalApproval()
+    ),
+    "sav": VotingSystem(
+        'Satisfaction Approval',
+        votelib.evaluate.core.PreConverted(
+            converter=votelib.convert.ApprovalToSimpleVotes(split=True),
+            evaluator=votelib.evaluate.Plurality(),
+        )
+    ),
 }
 RANKED_SELECTION_SYSTEMS = {
     "borda": VotingSystem('Borda', votelib.evaluate.PreConverted(
-        converter=votelib.convert.RankedToPositionalVotes(rank_scorer=votelib.component.rankscore.Borda()),
+        converter=votelib.convert.RankedToPositionalVotes(
+            rank_scorer=votelib.component.rankscore.Borda()
+        ),
         evaluator=votelib.evaluate.Plurality(),
     )),
-    "ranked_pairs": VotingSystem('Ranked Pairs', _ranked_condorcet(votelib.evaluate.condorcet.RankedPairs())),
-    "copeland": VotingSystem('Copeland', _ranked_condorcet(votelib.evaluate.condorcet.Copeland(second_order=False))),
-    "copeland_2o": VotingSystem('Second order Copeland', _ranked_condorcet(votelib.evaluate.condorcet.Copeland())),
-    "schulze": VotingSystem('Schulze', _ranked_condorcet(votelib.evaluate.condorcet.Schulze())),
-    "kemeny_young": VotingSystem('Kemeny-Young', _ranked_condorcet(votelib.evaluate.condorcet.KemenyYoung())),
-    "minimax": VotingSystem('Minimax', _ranked_condorcet(votelib.evaluate.condorcet.MinimaxCondorcet())),
-    "stv_hare": VotingSystem('Hare STV', votelib.evaluate.sequential.TransferableVoteSelector(transferer='Hare')),
-    "stv_gregory": VotingSystem('Gregory STV', votelib.evaluate.sequential.TransferableVoteSelector(transferer='Gregory')),
-    "bucklin": VotingSystem('Bucklin', votelib.evaluate.sequential.PreferenceAddition()),
-    "oklahoma": VotingSystem('Oklahoma', votelib.evaluate.sequential.PreferenceAddition(lambda ord: Fraction(1, ord+1))),
-    "tideman_alt": VotingSystem('Tideman Alternative', votelib.evaluate.sequential.TidemanAlternative()),
+    "ranked_pairs": VotingSystem('Ranked Pairs', _ranked_condorcet(
+        votelib.evaluate.condorcet.RankedPairs()
+    )),
+    "copeland": VotingSystem('Copeland', _ranked_condorcet(
+        votelib.evaluate.condorcet.Copeland(second_order=False)
+    )),
+    "copeland_2o": VotingSystem('Second order Copeland', _ranked_condorcet(
+        votelib.evaluate.condorcet.Copeland()
+    )),
+    "schulze": VotingSystem('Schulze', _ranked_condorcet(
+        votelib.evaluate.condorcet.Schulze()
+    )),
+    "kemeny_young": VotingSystem('Kemeny-Young', _ranked_condorcet(
+        votelib.evaluate.condorcet.KemenyYoung()
+    )),
+    "minimax": VotingSystem('Minimax', _ranked_condorcet(
+        votelib.evaluate.condorcet.MinimaxCondorcet()
+    )),
+    "stv_hare": VotingSystem(
+        'Hare STV',
+        votelib.evaluate.sequential.TransferableVoteSelector(transferer='Hare')
+    ),
+    "stv_gregory": VotingSystem(
+        'Gregory STV',
+        votelib.evaluate.sequential.TransferableVoteSelector(
+            transferer='Gregory'
+        )
+    ),
+    "bucklin": VotingSystem(
+        'Bucklin', votelib.evaluate.sequential.PreferenceAddition()
+    ),
+    "oklahoma": VotingSystem(
+        'Oklahoma',
+        votelib.evaluate.sequential.PreferenceAddition(
+            lambda ord: Fraction(1, ord+1)
+        )
+    ),
+    "tideman_alt": VotingSystem(
+        'Tideman Alternative', votelib.evaluate.sequential.TidemanAlternative()
+    ),
     "benham": VotingSystem('Benham', votelib.evaluate.sequential.Benham()),
     "baldwin": VotingSystem('Baldwin', votelib.evaluate.sequential.Baldwin()),
     # "smith_stv": VotingSystem('Smith/STV', votelib.evaluate.Conditioned(
@@ -110,20 +160,46 @@ RANKED_SELECTION_SYSTEMS = {
     # )),
 }
 RANKED_DISTRIBUTION_SYSTEMS = {
-    "stv_hare": VotingSystem('Hare STV', votelib.evaluate.sequential.TransferableVoteDistributor(transferer='Hare')),
-    "stv_gregory": VotingSystem('Gregory STV', votelib.evaluate.sequential.TransferableVoteDistributor(transferer='Gregory')),
+    "stv_hare": VotingSystem(
+        'Hare STV',
+        votelib.evaluate.sequential.TransferableVoteDistributor(
+            transferer='Hare'
+        )
+    ),
+    "stv_gregory": VotingSystem(
+        'Gregory STV',
+        votelib.evaluate.sequential.TransferableVoteDistributor(
+            transferer='Gregory'
+        )
+    ),
 }
 SCORE_SELECTION_SYSTEMS = {
-    "score_mean": VotingSystem('Mean Score', votelib.evaluate.cardinal.ScoreVoting('mean')),
-    "score_sum": VotingSystem('Sum Score', votelib.evaluate.cardinal.ScoreVoting('sum')),
-    "score_median": VotingSystem('Median Score', votelib.evaluate.cardinal.ScoreVoting('median')),
-    "mj": VotingSystem('Majority Judgment', votelib.evaluate.cardinal.MajorityJudgment()),
-    "mjplus": VotingSystem('Majority Judgment Plus', votelib.evaluate.cardinal.MajorityJudgment(tie_breaking='plus')),
+    "score_mean": VotingSystem(
+        'Mean Score', votelib.evaluate.cardinal.ScoreVoting('mean')
+    ),
+    "score_sum": VotingSystem(
+        'Sum Score', votelib.evaluate.cardinal.ScoreVoting('sum')
+    ),
+    "score_median": VotingSystem(
+        'Median Score', votelib.evaluate.cardinal.ScoreVoting('median')
+    ),
+    "mj": VotingSystem(
+        'Majority Judgment', votelib.evaluate.cardinal.MajorityJudgment()
+    ),
+    "mjplus": VotingSystem(
+        'Majority Judgment Plus',
+        votelib.evaluate.cardinal.MajorityJudgment(tie_breaking='plus')
+    ),
     "star": VotingSystem('STAR', votelib.evaluate.cardinal.STAR()),
-    "allocated_score": VotingSystem('Allocated Score', votelib.evaluate.cardinal.AllocatedScoreSelector()),
+    "allocated_score": VotingSystem(
+        'Allocated Score', votelib.evaluate.cardinal.AllocatedScoreSelector()
+    ),
 }
 SCORE_DISTRIBUTION_SYSTEMS = {
-    "allocated_score": VotingSystem('Allocated Score', votelib.evaluate.cardinal.AllocatedScoreDistributor()),
+    "allocated_score": VotingSystem(
+        'Allocated Score',
+        votelib.evaluate.cardinal.AllocatedScoreDistributor()
+    ),
 }
 SCORE_TO_RANKED_CONVERTERS = {
     None: votelib.convert.ScoreToRankedVotes(),
@@ -163,32 +239,54 @@ def get_available_systems(vote_type: type,
                 APPROVAL_TO_SIMPLE_CONVERTERS
             )
         else:
-            # not using plurality here since the default is directly AV and the split-converted is SAV
+            # not using plurality here since the default is directly AV
+            # and the split-converted is SAV
             return APPROVAL_SELECTION_SYSTEMS
     elif vote_type is RankedVoteType:
         if is_distribution:
             return {
                 **RANKED_DISTRIBUTION_SYSTEMS,
-                **preconverted_systems(SIMPLE_DISTRIBUTION_SYSTEMS, RANKED_TO_SIMPLE_CONVERTERS)
+                **preconverted_systems(
+                    SIMPLE_DISTRIBUTION_SYSTEMS,
+                    RANKED_TO_SIMPLE_CONVERTERS
+                )
             }
         else:
             return {
                 **RANKED_SELECTION_SYSTEMS,
-                **preconverted_systems(APPROVAL_SELECTION_SYSTEMS, RANKED_TO_APPROVAL_CONVERTERS),
-                **preconverted_systems(SIMPLE_SELECTION_SYSTEMS, RANKED_TO_SIMPLE_CONVERTERS),
+                **preconverted_systems(
+                    APPROVAL_SELECTION_SYSTEMS,
+                    RANKED_TO_APPROVAL_CONVERTERS
+                ),
+                **preconverted_systems(
+                    SIMPLE_SELECTION_SYSTEMS,
+                    RANKED_TO_SIMPLE_CONVERTERS
+                ),
             }
     elif vote_type is ScoreVoteType:
         if is_distribution:
             return {
                 **SCORE_DISTRIBUTION_SYSTEMS,
-                **preconverted_systems(RANKED_DISTRIBUTION_SYSTEMS, SCORE_TO_RANKED_CONVERTERS),
-                **preconverted_systems(SIMPLE_DISTRIBUTION_SYSTEMS, SCORE_TO_SIMPLE_CONVERTERS),
+                **preconverted_systems(
+                    RANKED_DISTRIBUTION_SYSTEMS,
+                    SCORE_TO_RANKED_CONVERTERS
+                ),
+                **preconverted_systems(
+                    SIMPLE_DISTRIBUTION_SYSTEMS,
+                    SCORE_TO_SIMPLE_CONVERTERS
+                ),
             }
         else:
             return {
                 **SCORE_SELECTION_SYSTEMS,
-                **preconverted_systems(RANKED_SELECTION_SYSTEMS, SCORE_TO_RANKED_CONVERTERS),
-                **preconverted_systems(SIMPLE_SELECTION_SYSTEMS, SCORE_TO_SIMPLE_CONVERTERS),
+                **preconverted_systems(
+                    RANKED_SELECTION_SYSTEMS,
+                    SCORE_TO_RANKED_CONVERTERS
+                ),
+                **preconverted_systems(
+                    SIMPLE_SELECTION_SYSTEMS,
+                    SCORE_TO_SIMPLE_CONVERTERS
+                ),
             }
 
 

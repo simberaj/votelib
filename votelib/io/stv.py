@@ -14,7 +14,7 @@ import decimal
 import collections
 import warnings
 from typing import List, Tuple, Dict, Union, Iterable, Optional, Collection
-from numbers import Number
+from numbers import Number, Real
 
 import votelib
 import votelib.convert
@@ -29,7 +29,7 @@ import votelib.component.transfer as transfer
 from votelib.candidate import Candidate
 from votelib.evaluate.sequential import \
     TransferableVoteSelector, TransferableVoteDistributor
-from votelib.io.core import VotingSetup
+from votelib.io.core import ElectionData
 
 
 SUPPORTED_QUOTAS: List[str] = ['droop', 'hare']
@@ -43,7 +43,7 @@ class STVParseError(votelib.io.core.ParseError):
     pass
 
 
-def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
+def dump_lines(data: Union[Dict[Tuple[Candidate, ...], Real], ElectionData],
                system: Union[
                    votelib.system.VotingSystem,
                    votelib.evaluate.Evaluator,
@@ -55,7 +55,8 @@ def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
                ) -> Iterable[str]:
     """Dump the election data into an STV.pm file.
 
-    :param votes: Ranked votes for the election.
+    :param data: Ranked votes for the election, or an election data object.
+        If an election data object is given, all other parameters are ignored.
     :param system: The election system (or just an evaluator) used in the
         election.
     :param candidates: List of candidates participating in the election.
@@ -71,6 +72,16 @@ def dump_lines(votes: Dict[Tuple[Candidate, ...], Number],
         non-uniform elimination). This parameter does not affect quota setup
         output, which is always attempted.
     """
+    if isinstance(data, ElectionData):
+        yield from dump_lines(
+            data=data.votes,
+            system=data.system,
+            candidates=data.candidates,
+            n_seats=data.n_seats,
+            output_method=output_method,
+        )
+        return
+    votes = data
     if system is not None:
         yield from _dump_system(system, output_method=output_method)
         if n_seats is not None:
@@ -222,27 +233,27 @@ def _ordinal_candidate_nicks(cand_names: Collection[Candidate]
     return nicks
 
 
-def load_lines(lines: Iterable[str]) -> VotingSetup:
+def load_lines(lines: Iterable[str]) -> ElectionData:
     system, candidates, nicks, n_ballots, is_ordered = _load_system(lines)
     if n_ballots is None:
         # BLT mode invoked, the rest of the file is in BLT format.
         try:
-            votes, blt_n_seats, blt_candidates, election_name = \
-                votelib.io.blt.load_lines(lines)
+            blt_setup = votelib.io.blt.load_lines(lines)
         except votelib.io.blt.BLTParseError as err:
             raise STVParseError('BLT content parsing failed') from err
         # Replace the STV config results with the BLT data where applicable.
-        if system.name is None and election_name:
-            system.name = election_name
+        if system.name is None and blt_setup.election_name:
+            system.name = blt_setup.election_name
         system.evaluator = votelib.evaluate.FixedSeatCount(
-            system.evaluator, blt_n_seats
+            system.evaluator, blt_setup.n_seats
         )
-        if not candidates and blt_candidates:
-            candidates = blt_candidates
+        if not candidates and blt_setup.candidates:
+            candidates = blt_setup.candidates
+        votes = blt_setup.votes
     else:
         loader = _load_ordered_votes if is_ordered else _load_unordered_votes
         votes = loader(_iter_vote_lines(lines, n_ballots), nicks)
-    return VotingSetup(
+    return ElectionData(
         votes=votes,
         system=system,
         candidates=candidates

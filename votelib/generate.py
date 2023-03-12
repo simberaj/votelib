@@ -40,7 +40,7 @@ class Sampler(metaclass=abc.ABCMeta):
 
 
 class DistributionSampler(Sampler):
-    """Sample points from the issue or score space by specifying a distribution.
+    """Sample points from an issue or score space by specifying a distribution.
 
     Uses a statistical probability distribution to produce randomly located
     points within the issue space or score space of given dimensionality.

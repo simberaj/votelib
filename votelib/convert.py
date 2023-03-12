@@ -256,7 +256,7 @@ class ScoreToSimpleVotes:
 
 @simple_serialization
 class RankedToFirstPreference:
-    """Aggregate ranked votes to simple votes, taking each voter's first choice.
+    """Aggregate ranked to simple votes, taking each voter's first choice.
 
     This is useful to determine the plurality winner in ranked choice voting
     systems.

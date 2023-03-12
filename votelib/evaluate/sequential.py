@@ -760,7 +760,11 @@ class Benham:
 class Baldwin:
     """Baldwin's sequential Borda elimination method."""
 
-    def __init__(self, converter: Optional[votelib.convert.RankedToPositionalVotes] = None):
+    def __init__(self,
+                 converter: Optional[
+                     votelib.convert.RankedToPositionalVotes
+                 ] = None
+                 ):
         if converter is None:
             converter = votelib.convert.RankedToPositionalVotes(
                 rank_scorer=votelib.component.rankscore.Borda(base=0)
