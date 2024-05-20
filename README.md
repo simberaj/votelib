@@ -115,7 +115,7 @@ list there for some suggestions.
 
 How to add features:
 
-1.  Fork it (https://github.com/simberaj/pysynth/fork)
+1.  Fork it (<https://github.com/simberaj/votelib/fork>)
 2.  Create your feature branch (`git checkout -b feature/feature-name`)
 3.  Commit your changes (`git commit -am "feature-name added"`)
 4.  Push to the branch (`git push origin feature/feature-name`)

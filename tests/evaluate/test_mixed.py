@@ -10,6 +10,7 @@ import votelib.vote
 import votelib.evaluate.core
 import votelib.evaluate.cardinal
 import votelib.evaluate.condorcet
+import votelib.evaluate.proportional
 
 
 SMITH_SCORE = votelib.evaluate.core.Conditioned(
@@ -58,3 +59,55 @@ def test_smith_score(votes, expected_winner):
     assert winner == expected_winner
 
 
+PROPORT_EVAL = votelib.evaluate.proportional.LargestRemainder(
+    quota_function='hare'
+)
+
+
+@pytest.mark.parametrize("system, result", [
+    (
+        PROPORT_EVAL,
+        {'A': 54, 'B': 34, 'C': 7, 'D': 5},
+    ),
+    (
+        votelib.evaluate.core.AdjustedSeatCount(
+            votelib.evaluate.core.AllowOverhang(PROPORT_EVAL),
+            PROPORT_EVAL,
+        ),
+        {'A': 54, 'B': 41, 'C': 13, 'D': 5},
+    ),
+    (
+        votelib.evaluate.core.AdjustedSeatCount(
+            votelib.evaluate.core.LevelOverhang(PROPORT_EVAL),
+            PROPORT_EVAL,
+        ),
+        {'A': 63, 'B': 60, 'C': 19, 'D': 5},
+    )
+])
+def test_compensatory_systems(system, result):
+    # https://en.wikipedia.org/wiki/Additional_member_system
+    elect_res = {
+        'A': 54,
+        'B': 11,
+        'C': 0,
+        'D': 5,
+    }
+    party_vote = {
+        'A': 43,
+        'B': 41,
+        'C': 13,
+        'D': 3,
+    }
+
+    class MockEvaluator:
+        def evaluate(self, *args, **kwargs):
+            return elect_res
+
+    total_evaluator = votelib.evaluate.core.MultistageDistributor([
+        MockEvaluator(),
+        system
+    ])
+    total_res = total_evaluator.evaluate(
+        party_vote, 100
+    )
+    assert total_res == result

@@ -218,6 +218,26 @@ class QuotaDistributor:
         :param max_seats: Maximum number of seats that the given
             candidate/party can obtain in total (including previous gains).
         """
+        if prev_gains:
+            noprev_result = self.evaluate(
+                votes, n_seats, max_seats=max_seats
+            )
+            overhung_result = {
+                cand: n_prev for cand, n_prev in prev_gains.items()
+                if n_prev > noprev_result.get(cand, 0)
+            }
+            print(overhung_result)
+            if overhung_result:
+                rest_votes = {
+                    cand: n_votes for cand, n_votes in votes.items()
+                    if cand not in overhung_result
+                }
+                rest_n_seats = n_seats - sum(overhung_result.values())
+                rest_result = self.evaluate(
+                    rest_votes, rest_n_seats, max_seats=max_seats
+                )
+                print(rest_result)
+                return votelib.util.sum_dicts(overhung_result, rest_result)
         quota_val = self.quota_function(
             sum(votes.values()), n_seats
         )
@@ -257,6 +277,9 @@ class QuotaDistributor:
             ))
         total_awarded = sum(selected.values()) + sum(prev_gains.values())
         if total_awarded > n_seats:
+            if prev_gains:
+
+                print(prev_gains, selected, votelib.util.sum_dicts(selected, prev_gains))
             if self.on_overaward == 'ignore':
                 return selected
             elif self.on_overaward == 'error':

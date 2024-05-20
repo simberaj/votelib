@@ -462,6 +462,8 @@ class RankedPairs:
             if not cls._is_path(locked_pairs, pair[1], pair[0]):
                 logging.info('locking %s over %s', *pair)
                 locked_pairs.append(pair)
+            else:
+                logging.info('disregarding %s over %s: conflict with previously locked pairs', *pair)
         return locked_pairs
 
     @staticmethod

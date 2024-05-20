@@ -586,9 +586,12 @@ class LevelOverhang:
         results from the second round votes to determine which seats are
         overhang. Usually will be the same or very similar to the evaluator
         used in the second round directly.
+    :param max_multiple: How many overhang and leveling seats in total at most
+        can be awarded before an infeasibility error is raised.
     """
-    def __init__(self, evaluator: Distributor):
+    def __init__(self, evaluator: Distributor, max_multiple: float = 1.0):
         self.evaluator = evaluator
+        self.max_multiple = max_multiple
 
     def calculate(self,
                   votes: Dict[Any, int],
@@ -623,11 +626,20 @@ class LevelOverhang:
                 nonprop_drop += prev_gain
         adj_count = n_seats - nonprop_drop
         pmins = list(lowest_allowed.items())
+        print(prop_result)
+        print(lowest_allowed)
+        print(nonprop_drop)
+        print(adj_count, prop_result)
+        print(max_seats)
         while any(prop_result[party] < minimum for party, minimum in pmins):
             adj_count += 1
+            if adj_count > (self.max_multiple + 1) * n_seats:
+                raise VotingSystemError('would award too many leveling seats')
+            print(votes, adj_count, max_seats)
             prop_result = self.evaluator.evaluate(
                 votes, adj_count, max_seats=max_seats,
             )
+            print(' ', prop_result)
         return adj_count + nonprop_drop - n_seats
 
 
