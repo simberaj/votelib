@@ -941,6 +941,7 @@ class SubsettedVotes:
             sub = collections.defaultdict(int)
             for full_vote, n_votes in votes.items():
                 sub_vote = self.vote_subsetter.subset(full_vote, subset)
+                print(full_vote, sub_vote)
                 if sub_vote is not None:
                     sub[sub_vote] += n_votes
             return dict(sub)

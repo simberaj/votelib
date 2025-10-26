@@ -335,6 +335,7 @@ class TransferableVoteDistributor:
         else:
             n_seats = self._retained_count(totals_in_play)
             retained = votelib.evaluate.core.get_n_best(totals, n_seats)
+        print(totals, retained)
         if any(isinstance(e, votelib.evaluate.core.Tie) for e in retained):
             raise NotImplementedError('tie in STV elimination')
         return retained
@@ -776,3 +777,25 @@ class Baldwin:
             cand: -score
             for cand, score in self.converter.convert(votes).items()
         }
+
+
+class ProportionalCondorcet:
+    def __init__(self, condorcet_selector, quota_function, transferer=DEFAULT_TRANSFERER):
+        self.condorcet_selector = condorcet_selector
+        self.quota_function = votelib.component.quota.construct(quota_function)
+        self.transferer = votelib.component.transfer.construct(transferer)
+
+    def evaluate(self,
+                 votes: Dict[RankedVoteType, int],
+                 n_seats: int = 1) -> List[Candidate]:
+        current_votes = votes
+        quota_val = self.quota_function(sum(votes.values()), n_seats)
+        print(quota_val)
+        winners = []
+        for i in range(n_seats):
+            current_condo_votes = RANKED_TO_CONDORCET.convert(current_votes)
+            winners.extend(self.condorcet_selector.evaluate(current_condo_votes, 1))
+            print(winners)
+            current_votes = self.transferer.subtract(current_votes, {winners[-1]: quota_val})
+            print(current_votes)
+        return winners
